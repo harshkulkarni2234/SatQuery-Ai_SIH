@@ -36,8 +36,9 @@ frontend/.next/
 Thumbs.db
 
 # Generated data
-data/processed/
-data/uploaded_images/
+**/data/processed/
+**/data/uploaded_images/
+**/data/change_masks/
 outputs/
 
 # Model files

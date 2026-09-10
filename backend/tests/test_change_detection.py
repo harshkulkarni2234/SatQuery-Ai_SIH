@@ -1,0 +1,104 @@
+"""Tests for the deterministic change-detection specialist."""
+
+import os
+import tempfile
+
+import cv2
+import numpy as np
+import pytest
+
+from app.services.change_detection import detect_change
+
+
+# ── Helpers ───────────────────────────────────────────────────────────
+
+def _make_image(path: str, color: tuple[int, int, int] = (100, 100, 100), size: int = 100):
+    """Write a solid-colour BGR image to *path*."""
+    img = np.full((size, size, 3), color, dtype=np.uint8)
+    cv2.imwrite(path, img)
+
+
+def _make_image_with_region(
+    path: str,
+    bg_color: tuple[int, int, int] = (100, 100, 100),
+    region_color: tuple[int, int, int] = (255, 255, 255),
+    size: int = 100,
+    region: tuple[int, int, int, int] = (20, 20, 50, 50),
+):
+    """Write an image with a solid background and a contrasting rectangular region."""
+    img = np.full((size, size, 3), bg_color, dtype=np.uint8)
+    x, y, w, h = region
+    img[y : y + h, x : x + w] = region_color
+    cv2.imwrite(path, img)
+
+
+# ── Tests ─────────────────────────────────────────────────────────────
+
+class TestChangeDetection:
+
+    def test_identical_images_no_change(self, tmp_path):
+        p1 = str(tmp_path / "a.png")
+        p2 = str(tmp_path / "b.png")
+        _make_image(p1, color=(80, 90, 100))
+        _make_image(p2, color=(80, 90, 100))
+
+        result = detect_change(p1, p2)
+        assert result["change_percentage"] == 0.0
+        assert result["num_regions"] == 0
+        assert result["bounding_boxes"] == []
+        assert result["change_mask_path"] is None
+        assert "No significant change" in result["answer_text"]
+
+    def test_different_images_detect_change(self, tmp_path):
+        p1 = str(tmp_path / "before.png")
+        p2 = str(tmp_path / "after.png")
+        _make_image(p1, color=(50, 50, 50))
+        # Large bright region in the 'after' image
+        _make_image_with_region(p2, bg_color=(50, 50, 50), region_color=(255, 255, 255), region=(10, 10, 40, 40))
+
+        result = detect_change(p1, p2)
+        assert result["change_percentage"] > 0
+        assert result["num_regions"] >= 1
+        assert len(result["bounding_boxes"]) >= 1
+        assert result["change_mask_path"] is not None
+        assert os.path.isfile(result["change_mask_path"])
+
+    def test_bounding_box_has_correct_shape(self, tmp_path):
+        p1 = str(tmp_path / "a.png")
+        p2 = str(tmp_path / "b.png")
+        _make_image(p1, color=(30, 30, 30))
+        _make_image_with_region(p2, bg_color=(30, 30, 30), region_color=(200, 200, 200), region=(0, 0, 50, 50))
+
+        result = detect_change(p1, p2)
+        for box in result["bounding_boxes"]:
+            assert len(box) == 4
+            x1, y1, x2, y2 = box
+            assert x2 > x1
+            assert y2 > y1
+
+    def test_different_dimensions_resized(self, tmp_path):
+        p1 = str(tmp_path / "a.png")
+        p2 = str(tmp_path / "b.png")
+        # Different sizes — should resize without crashing
+        img1 = np.full((80, 120, 3), (60, 60, 60), dtype=np.uint8)
+        img2 = np.full((60, 100, 3), (60, 60, 60), dtype=np.uint8)
+        cv2.imwrite(p1, img1)
+        cv2.imwrite(p2, img2)
+
+        result = detect_change(p1, p2)
+        assert result["change_percentage"] == 0.0
+
+    def test_invalid_path_raises(self):
+        with pytest.raises(FileNotFoundError):
+            detect_change("/nonexistent/a.png", "/nonexistent/b.png")
+
+    def test_mask_saved_when_change_exists(self, tmp_path):
+        p1 = str(tmp_path / "a.png")
+        p2 = str(tmp_path / "b.png")
+        _make_image(p1, color=(40, 40, 40))
+        _make_image_with_region(p2, bg_color=(40, 40, 40), region_color=(220, 220, 220), region=(0, 0, 60, 60))
+
+        result = detect_change(p1, p2)
+        if result["bounding_boxes"]:
+            assert result["change_mask_path"] is not None
+            assert os.path.getsize(result["change_mask_path"]) > 0
