@@ -1,54 +1,132 @@
-import uuid
+import os
 import time
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
 from app.services.router import classify_query
+from app.services.grounding import ground_object
+from app.services.change_detection import detect_change
 
 router = APIRouter(tags=["query"])
 
 
+def _tracked_exception(message: str, status_code: int = 400) -> HTTPException:
+    """Raise a client-safe error that never leaks internals."""
+    return HTTPException(status_code=status_code, detail=message)
+
+
 @router.post("/query", response_model=QueryResponse)
-def post_query(body: QueryRequest, db: Session = Depends(get_db)):
+def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_db)):
     images = db.query(Image).filter(Image.id.in_(body.image_ids)).all()
     found_ids = {str(img.id) for img in images}
     missing = [str(i) for i in body.image_ids if str(i) not in found_ids]
     if missing:
-        raise HTTPException(status_code=404, detail=f"Image(s) not found: {', '.join(missing)}")
+        raise _tracked_exception(
+            f"Image(s) not found: {', '.join(missing)}", status_code=404
+        )
 
-    image_dicts = [{"id": str(img.id), "modality": img.modality} for img in images]
+    by_id = {img.id: img for img in images}
+    ordered_images = [by_id[i] for i in body.image_ids]
+
+    image_dicts = [{"id": str(img.id), "modality": img.modality} for img in ordered_images]
     classification = classify_query(body.query_text, image_dicts)
 
-    t0 = time.perf_counter()
+    if not classification["validation_passed"]:
+        raise _tracked_exception(classification["reason"])
 
-    answer_text = (
-        f"[STUB] Specialist services not yet implemented. "
-        f"Task classified as: {classification['task_classified'] or 'UNKNOWN'}. "
-        f"No AI model was executed."
-    )
+    task = classification["task_classified"]
+
+    t0 = time.perf_counter()
+    specialist_result = None
+    bounding_boxes = None
+    confidence = None
+    change_mask_url = None
+    change_mask_path = None
+
+    try:
+        if task == "GROUNDING":
+            img = ordered_images[0]
+            if not os.path.isfile(img.file_path):
+                raise _tracked_exception(
+                    f"Image file for '{img.filename}' is missing on disk."
+                )
+            target = classification.get("grounding_target")
+            specialist_result = ground_object(img.file_path, target)
+            answer_text = specialist_result["answer_text"]
+            confidence = specialist_result["confidence_score"]
+            bounding_boxes = specialist_result["bounding_boxes"] or None
+            top_meta = {
+                "object_type": specialist_result["object_type"],
+                "num_regions": len(bounding_boxes or []),
+                "specialist": "grounding",
+            }
+
+        elif task == "CHANGE_DETECTION":
+            img_before, img_after = ordered_images
+            if not os.path.isfile(img_before.file_path) or not os.path.isfile(
+                img_after.file_path
+            ):
+                raise _tracked_exception(
+                    "One or more image files for change detection are missing on disk."
+                )
+            specialist_result = detect_change(img_before.file_path, img_after.file_path)
+            answer_text = specialist_result["answer_text"]
+            bounding_boxes = specialist_result["bounding_boxes"] or None
+            if specialist_result["change_mask_path"]:
+                change_mask_path = specialist_result["change_mask_path"]
+                change_mask_url = str(
+                    request.url_for("masks", path=os.path.basename(change_mask_path))
+                )
+            top_meta = {
+                "change_percentage": specialist_result["change_percentage"],
+                "num_regions": specialist_result["num_regions"],
+                "changed_pixels": specialist_result["changed_pixels"],
+                "total_pixels": specialist_result["total_pixels"],
+                "specialist": "change_detection",
+            }
+
+        else:
+            # VQA / CROSS_MODAL — honest stubs, no model executed
+            answer_text = (
+                f"[STUB] The {task} specialist is not implemented yet. "
+                "Only deterministic GROUNDING and CHANGE_DETECTION services "
+                "are currently available."
+            )
+            top_meta = {"specialist": "stub"}
+    except HTTPException:
+        raise
+    except Exception:
+        raise _tracked_exception(
+            "Specialist processing failed. Please check that the uploaded "
+            "images are valid and re-try."
+        )
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
 
+    execution_status = "completed" if specialist_result is not None else "not_implemented"
+
     trace = ExecutionTrace(
-        selected_tool=classification["task_classified"],
+        selected_tool=task,
         model_version=None,
         modalities_detected=classification["modalities_detected"],
-        confidence_score=None,
+        confidence_score=confidence,
         execution_time_ms=elapsed_ms,
         reason=classification["reason"],
+        execution_status=execution_status,
     )
 
     query_record = Query(
         query_text=body.query_text,
         image_ids=body.image_ids,
-        task_classified=classification["task_classified"],
-        selected_tool=classification["task_classified"],
+        task_classified=task,
+        selected_tool=task,
         model_version=None,
-        confidence_score=None,
+        confidence_score=confidence,
         execution_time_ms=elapsed_ms,
     )
     db.add(query_record)
@@ -57,11 +135,13 @@ def post_query(body: QueryRequest, db: Session = Depends(get_db)):
     result_record = QueryResult(
         query_id=query_record.id,
         answer_text=answer_text,
-        bounding_boxes=None,
-        change_mask_path=None,
+        bounding_boxes=bounding_boxes,
+        change_mask_path=change_mask_path,
         metadata_={
-            "validation_passed": classification["validation_passed"],
-            "stub": True,
+            **top_meta,
+            "reason": classification["reason"],
+            "execution_status": execution_status,
+            "execution_trace": trace.model_dump(),
         },
     )
     db.add(result_record)
@@ -70,17 +150,18 @@ def post_query(body: QueryRequest, db: Session = Depends(get_db)):
 
     return QueryResponse(
         query_id=query_record.id,
-        task_classified=classification["task_classified"],
+        task_classified=task,
         answer_text=answer_text,
-        confidence_score=None,
-        bounding_boxes=None,
-        change_mask_url=None,
+        confidence_score=confidence,
+        bounding_boxes=bounding_boxes,
+        change_mask_url=change_mask_url,
         execution_trace=trace,
+        metadata=top_meta,
     )
 
 
 @router.get("/query/{query_id}", response_model=QueryResponse)
-def get_query(query_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_query(query_id: uuid.UUID, request: Request, db: Session = Depends(get_db)):
     query_record = db.query(Query).filter(Query.id == query_id).first()
     if not query_record:
         raise HTTPException(status_code=404, detail="Query not found")
@@ -89,19 +170,38 @@ def get_query(query_id: uuid.UUID, db: Session = Depends(get_db)):
         db.query(QueryResult).filter(QueryResult.query_id == query_id).first()
     )
 
+    meta = (result_record.metadata_ or {}) if result_record else {}
+    cached = meta.get("execution_trace") or {}
+
+    trace = ExecutionTrace(
+        selected_tool=cached.get("selected_tool") or query_record.selected_tool,
+        model_version=cached.get("model_version") or query_record.model_version,
+        modalities_detected=cached.get("modalities_detected") or [],
+        confidence_score=(
+            query_record.confidence_score
+            if query_record.confidence_score is not None
+            else cached.get("confidence_score")
+        ),
+        execution_time_ms=query_record.execution_time_ms,
+        reason=cached.get("reason"),
+        execution_status=cached.get("execution_status"),
+    )
+
+    change_mask_url = None
+    if result_record and result_record.change_mask_path:
+        change_mask_url = str(
+            request.url_for("masks", path=os.path.basename(result_record.change_mask_path))
+        )
+
+    top_meta = {k: v for k, v in meta.items() if k != "execution_trace"}
+
     return QueryResponse(
         query_id=query_record.id,
         task_classified=query_record.task_classified,
         answer_text=result_record.answer_text if result_record else "",
         confidence_score=query_record.confidence_score,
         bounding_boxes=result_record.bounding_boxes if result_record else None,
-        change_mask_url=result_record.change_mask_path if result_record else None,
-        execution_trace=ExecutionTrace(
-            selected_tool=query_record.selected_tool,
-            model_version=query_record.model_version,
-            modalities_detected=[],
-            confidence_score=query_record.confidence_score,
-            execution_time_ms=query_record.execution_time_ms,
-            reason=result_record.metadata_.get("reason") if result_record and result_record.metadata_ else None,
-        ),
+        change_mask_url=change_mask_url,
+        execution_trace=trace,
+        metadata=top_meta or None,
     )

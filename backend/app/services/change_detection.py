@@ -90,10 +90,10 @@ def detect_change(image_path_before: str, image_path_after: str) -> dict:
         area = stats[i, cv2.CC_STAT_AREA]
         if area < min_area:
             continue
-        x = stats[i, cv2.CC_STAT_LEFT]
-        y = stats[i, cv2.CC_STAT_TOP]
-        bw = stats[i, cv2.CC_STAT_WIDTH]
-        bh = stats[i, cv2.CC_STAT_HEIGHT]
+        x = int(stats[i, cv2.CC_STAT_LEFT])
+        y = int(stats[i, cv2.CC_STAT_TOP])
+        bw = int(stats[i, cv2.CC_STAT_WIDTH])
+        bh = int(stats[i, cv2.CC_STAT_HEIGHT])
         bounding_boxes.append([x, y, x + bw, y + bh])
         changed_pixels += int(np.count_nonzero(labels == i))
 

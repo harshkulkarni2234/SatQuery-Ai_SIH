@@ -31,6 +31,7 @@ class ExecutionTrace(BaseModel):
     confidence_score: Optional[float] = None
     execution_time_ms: Optional[int] = None
     reason: Optional[str] = None
+    execution_status: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
@@ -41,3 +42,4 @@ class QueryResponse(BaseModel):
     bounding_boxes: Optional[list[list[float]]] = None
     change_mask_url: Optional[str] = None
     execution_trace: ExecutionTrace
+    metadata: Optional[dict] = None
