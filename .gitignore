@@ -37,6 +37,7 @@ Thumbs.db
 
 # Generated data
 data/processed/
+data/uploaded_images/
 outputs/
 
 # Model files
