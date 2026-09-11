@@ -139,7 +139,14 @@ const SPECIALISTS = [
   },
 ];
 
-const SPEC_IDX = Object.fromEntries(SPECIALISTS.map((s, i) => [s.id, i]));
+// Ring traversal order (single source of truth). The orbit dot rotates ONCE
+// through exactly these specialist ids, one per SPECIALIST_DWELL_MS. Each
+// specialist is assigned the ring position equal to its index in this sequence
+// so the dot's single continuous rotation lands on every one in this order.
+const ORBIT_SEQUENCE = ["VQA", "CHANGE_DETECTION", "GROUNDING", "CROSS_MODAL"];
+const ORBIT_POS = Object.fromEntries(
+  ORBIT_SEQUENCE.map((id, i) => [id, i])
+);
 
 // Display names shown in the winner reveal / "Model selected" transcript.
 const WINNER_NAMES = {
@@ -157,9 +164,9 @@ const STEP_LABELS = [
 ];
 
 // Agent-selection traversal clock. Every specialist is visited once for a
-// fixed dwell before the dot moves on; the total run is 4 × 4s = 16s and is
+// fixed dwell before the dot moves on; the total run is 4 × 1s = 4s and is
 // intentionally independent of backend inference latency.
-const SPECIALIST_DWELL_MS = 1500;
+const SPECIALIST_DWELL_MS = 1000;
 
 const SCENARIOS = [
   {
@@ -449,8 +456,9 @@ function AgentSelection({ orbitStep, phase, selectedId, animLabel }) {
           </div>
         </div>
 
-        {SPECIALISTS.map((spec, i) => {
-          const isActive = isTraversing && orbitStep === i;
+        {SPECIALISTS.map((spec) => {
+          const ringPos = ORBIT_POS[spec.id] ?? 0;
+          const isActive = isTraversing && orbitStep === ringPos;
           const isNodeSelected = isSelected && selectedId === spec.id;
           const isNodeWinner = (isWinner || isPreparing) && selectedId === spec.id;
           const isNodeFaded =
@@ -464,7 +472,7 @@ function AgentSelection({ orbitStep, phase, selectedId, animLabel }) {
               }${isNodeWinner ? " node-winner" : ""}${
                 isNodeFaded ? " node-faded" : ""
               }`}
-              data-pos={i}
+              data-pos={ringPos}
             >
               <div className="node-icon">
                 <SpecIcon size={22} />
@@ -1299,8 +1307,10 @@ export default function App() {
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
     // Backend work is requested immediately but runs in the background. The
-    // UI traversal below advances on a FIXED 4s-per-specialist clock and is
-    // completely independent of upload / VQA inference latency.
+    // UI traversal below advances on a FIXED 1s-per-specialist clock (4 × 1s
+    // = 4s total) and is completely independent of upload / VQA inference
+    // latency. Step boundaries are anchored to an absolute start instant so
+    // the sequence cannot drift even when the event loop is busy.
     const finish = (async () => {
       const withIds = [...images];
       for (let i = 0; i < withIds.length; i++) {
@@ -1327,13 +1337,17 @@ export default function App() {
         );
 
         (async () => {
+          const stepTimes = Array.from(
+            { length: ORBIT_SEQUENCE.length },
+            (_, k) => performance.now() + (k + 1) * SPECIALIST_DWELL_MS
+          );
           setOrbitStep(0);
           setAnimLabel(STEP_LABELS[0]);
-          for (let i = 0; i < SPECIALISTS.length; i++) {
-            await delay(SPECIALIST_DWELL_MS);
+          for (let k = 0; k < stepTimes.length; k++) {
+            await delay(Math.max(0, stepTimes[k] - performance.now()));
             if (settled) return; // error path — stop advancing
-            const next = i + 1;
-            if (next < SPECIALISTS.length) {
+            const next = k + 1;
+            if (next < stepTimes.length) {
               setOrbitStep(next);
               setAnimLabel(STEP_LABELS[next]);
             }
@@ -1355,7 +1369,7 @@ export default function App() {
       //   D) preparing report (~900ms) then hand off to the ready screen.
       setPhase("selected");
       setSelectedTask(task);
-      setOrbitStep(SPEC_IDX[task] ?? 0);
+      setOrbitStep(ORBIT_POS[task] ?? 0);
       setAnimLabel("Specialist selected \u2713");
       setResult(data);
       await delay(520);
