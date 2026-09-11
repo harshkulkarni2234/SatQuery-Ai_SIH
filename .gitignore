@@ -24,6 +24,17 @@ frontend/build/
 frontend/.next/
 *.tsbuildinfo
 
+# Test / tool caches and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebook checkpoints / generated notebook artifacts
+ipynb_checkpoints/
+
+# Logs
+*.log
+
 # IDE
 .vscode/
 .idea/
@@ -45,5 +56,8 @@ outputs/
 *.bin
 *.safetensors
 *.gguf
+*.pt
+*.pth
+*.ckpt
 models/
 checkpoints/

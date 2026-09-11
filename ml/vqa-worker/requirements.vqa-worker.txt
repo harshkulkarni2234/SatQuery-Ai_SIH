@@ -1,0 +1,19 @@
+# VQA worker dependencies (pinned to the versions verified in Phase 7C Stage 3).
+# PIP INSTALL ORDER:
+#   1) pip install torch==2.14.0+cu130 --index-url https://download.pytorch.org/whl/cu130
+#      (GPU/CUDA build used in testing; on a CPU-only machine use the standard CPU wheel instead)
+#   2) pip install -r requirements.vqa-worker.txt
+#
+# This environment is intentionally SEPARATE from the FastAPI backend venv.
+transformers==4.57.6
+peft==0.20.0
+accelerate==1.15.0
+safetensors==0.8.0
+tokenizers==0.22.2
+pillow==12.3.0
+huggingface-hub==0.36.2
+numpy==2.5.3
+fastapi
+uvicorn[standard]
+python-multipart
+requests==2.34.2

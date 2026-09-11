@@ -41,5 +41,6 @@ class QueryResponse(BaseModel):
     confidence_score: Optional[float] = None
     bounding_boxes: Optional[list[list[float]]] = None
     change_mask_url: Optional[str] = None
+    overlay_url: Optional[str] = None
     execution_trace: ExecutionTrace
     metadata: Optional[dict] = None

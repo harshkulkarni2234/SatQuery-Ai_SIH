@@ -140,7 +140,7 @@ class TestChangeDetectionIntegration:
         assert body["metadata"]["change_percentage"] > 0
         assert body["metadata"]["num_regions"] >= 1
         assert body["metadata"]["specialist"] == "change_detection"
-        assert "changed" in body["answer_text"]
+        assert "were detected" in body["answer_text"]
 
         trace = body["execution_trace"]
         assert trace["selected_tool"] == "CHANGE_DETECTION"
@@ -199,7 +199,9 @@ class TestChangeDetectionIntegration:
         assert resp.status_code == 400
         assert "exactly 2 images" in resp.json()["detail"]
 
-    def test_incompatible_modalities_rejected(self):
+    def test_optical_sar_pair_routed_to_cross_modal_even_with_change_wording(self):
+        # An OPTICAL + SAR pair is routed to CROSS_MODAL before change
+        # validation, so change-related wording is no longer rejected.
         optical_id = upload_png_bytes(_solid_png((40, 40, 40)), modality="OPTICAL")
         sar_id = upload_png_bytes(_solid_png((40, 40, 40)), modality="SAR")
 
@@ -210,16 +212,30 @@ class TestChangeDetectionIntegration:
                 "image_ids": [optical_id, sar_id],
             },
         )
-        assert resp.status_code == 400
-        assert "different modalities" in resp.json()["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["task_classified"] == "CROSS_MODAL"
 
 
 # ── STUBS REMAIN HONEST ───────────────────────────────────────────────
 
 class TestStubs:
 
-    def test_vqa_remains_honest_stub(self):
+    def test_vqa_executes_via_worker_path(self, monkeypatch):
+        from app.routes import query as query_module
+
         image_id = upload_png_bytes(_solid_png((120, 120, 60)), modality="OPTICAL")
+
+        def fake_answer(image_path, query_text):
+            return {
+                "answer_text": "The base SmolVLM model describes a uniform terrain patch.",
+                "model_version": "SmolVLM-256M-Instruct",
+                "specialist": False,
+                "confidence_score": None,
+                "execution_time_ms": 55,
+                "error": False,
+            }
+
+        monkeypatch.setattr(query_module, "answer_question", fake_answer)
 
         resp = client.post(
             "/query",
@@ -227,14 +243,110 @@ class TestStubs:
         )
         body = resp.json()
         assert body["task_classified"] == "VQA"
-        assert "[STUB]" in body["answer_text"]
+        assert "[STUB]" not in body["answer_text"]
         assert body["bounding_boxes"] is None
-        assert body["execution_trace"]["execution_status"] == "not_implemented"
-        assert body["execution_trace"]["model_version"] is None
+        assert body["execution_trace"]["execution_status"] == "completed"
+        assert body["execution_trace"]["model_version"] == "SmolVLM-256M-Instruct"
+        assert body["confidence_score"] is None
+        assert body["metadata"]["specialist"] == "vqa"
+        assert body["metadata"]["specialist_mode"] == "base"
 
-    def test_cross_modal_remains_honest_stub(self):
-        optical_id = upload_png_bytes(_solid_png((40, 40, 40)), modality="OPTICAL")
-        sar_id = upload_png_bytes(_solid_png((40, 40, 40)), modality="SAR")
+    def test_vqa_target_query_never_fabricates_boxes(self, monkeypatch):
+        """Object-specific VQA questions get real deterministic grounding boxes
+        when the object is detectable — and none otherwise."""
+        from app.routes import query as query_module
+
+        # Green optical image: vegetation IS detectable
+        green_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
+
+        def fake_answer(image_path, query_text):
+            return {
+                "answer_text": "Yes, vegetation is present.",
+                "model_version": "SmolVLM-256M-Instruct",
+                "specialist": False,
+                "confidence_score": None,
+                "execution_time_ms": 10,
+                "error": False,
+            }
+
+        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+
+        resp = client.post(
+            "/query",
+            json={"query_text": "Is there vegetation in the image?", "image_ids": [green_id]},
+        )
+        body = resp.json()
+        assert body["task_classified"] == "VQA"
+        assert body["bounding_boxes"], "Vegetation is present, grounding must find it"
+        assert body["metadata"]["visual_evidence"]["available"] is True
+        assert body["metadata"]["visual_evidence"]["target"] == "vegetation"
+
+        # Blue-only image: no building should be found -> honest None, not a box
+        blue_id = upload_png_bytes(_solid_png((160, 60, 60)), modality="OPTICAL")
+        resp = client.post(
+            "/query",
+            json={
+                "query_text": "Is there a building in the image?",
+                "image_ids": [blue_id],
+            },
+        )
+        body = resp.json()
+        assert body["task_classified"] == "VQA"
+        assert body["bounding_boxes"] is None
+        assert body["metadata"]["visual_evidence"]["available"] is False
+        assert "Spatial localization unavailable" in body["metadata"]["visual_evidence"]["message"]
+
+    def test_vqa_descriptive_query_reports_caption_cues_only(self, monkeypatch):
+        """Open-ended descriptions must not claim localized boxes."""
+        from app.routes import query as query_module
+
+        image_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
+
+        def fake_answer(image_path, query_text):
+            return {
+                "answer_text": "A uniform vegetation-like terrain patch.",
+                "model_version": "SmolVLM-256M-Instruct",
+                "specialist": False,
+                "confidence_score": None,
+                "execution_time_ms": 10,
+                "error": False,
+            }
+
+        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+
+        resp = client.post(
+            "/query",
+            json={"query_text": "What is visible in this area?", "image_ids": [image_id]},
+        )
+        body = resp.json()
+        assert body["bounding_boxes"] is None
+        ve = body["metadata"]["visual_evidence"]
+        assert ve["available"] is False
+        assert "dominant_cue" in ve or "detected_cues" in ve
+
+    def test_cross_modal_reports_per_sensor_regions(self):
+        optical_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
+        sar_id = upload_png_bytes(_solid_png((30, 30, 30)), modality="SAR")
+
+        resp = client.post(
+            "/query",
+            json={"query_text": "Analyze this image pair together", "image_ids": [optical_id, sar_id]},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        opt_regions = body["metadata"]["evidence"]["optical"]["regions"]
+        sar_regions = body["metadata"]["evidence"]["sar"]["regions"]
+        assert opt_regions, "Optical sensor must report land-cover regions"
+        assert sar_regions, "SAR sensor must report backscatter regions"
+        assert all(r["box"] and len(r["box"]) == 4 for r in opt_regions)
+        labels = {r["label"] for r in opt_regions + sar_regions}
+        assert labels, "Per-region labels must be provided"
+        assert "spatial_correspondence_note" in body["metadata"]
+        assert "could not be verified" in body["metadata"]["spatial_correspondence_note"].lower()
+
+    def test_cross_modal_executes_deterministic_service(self):
+        optical_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
+        sar_id = upload_png_bytes(_solid_png((30, 30, 30)), modality="SAR")
 
         resp = client.post(
             "/query",
@@ -243,8 +355,27 @@ class TestStubs:
         assert resp.status_code == 200
         body = resp.json()
         assert body["task_classified"] == "CROSS_MODAL"
-        assert "[STUB]" in body["answer_text"]
-        assert body["execution_trace"]["execution_status"] == "not_implemented"
+        assert "[STUB]" not in body["answer_text"]
+        assert body["confidence_score"] is None
+        assert body["bounding_boxes"] is None
+        assert body["execution_trace"]["execution_status"] == "completed"
+        assert body["execution_trace"]["model_version"] == "cross-modal-deterministic-v1"
+        assert body["metadata"]["specialist"] == "cross_modal"
+        assert "modality_contribution_note" in body["metadata"]
+        assert "optical" in body["metadata"]["modality_contribution_note"].lower()
+        assert body["metadata"]["evidence"]["optical"]["vegetation_green_dominance"] >= 0.9
+        assert body["metadata"]["evidence"]["sar"]["dark_low_backscatter_fraction"] >= 0.9
+
+    def test_cross_modal_same_modality_pair_rejected(self):
+        optical_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
+        optical2_id = upload_png_bytes(_solid_png((80, 120, 80)), modality="OPTICAL")
+
+        resp = client.post(
+            "/query",
+            json={"query_text": "Analyze this image pair together", "image_ids": [optical_id, optical2_id]},
+        )
+        assert resp.status_code == 400
+        assert "OPTICAL + SAR" in resp.json()["detail"]
 
 
 # ── Generic validation ────────────────────────────────────────────────

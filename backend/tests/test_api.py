@@ -74,10 +74,23 @@ def test_query_rejects_nonexistent_ids():
 
 # ── 5. Query accepts valid image IDs ─────────────────────────────────
 
-def test_query_valid_image_ids(uploaded_image_id):
+def test_query_valid_image_ids(uploaded_image_id, monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
+    from app.routes import query as query_module
     client = TestClient(app)
+
+    def fake_answer(image_path, query_text):
+        return {
+            "answer_text": "A terrain sample.",
+            "model_version": "SmolVLM-256M-Instruct",
+            "specialist": False,
+            "confidence_score": None,
+            "execution_time_ms": 42,
+            "error": False,
+        }
+
+    monkeypatch.setattr(query_module, "answer_question", fake_answer)
 
     resp = client.post(
         "/query",
@@ -89,7 +102,9 @@ def test_query_valid_image_ids(uploaded_image_id):
     assert body["task_classified"] == "VQA"
     assert "execution_trace" in body
     assert body["execution_trace"]["reason"] is not None
-    assert "[STUB]" in body["answer_text"]
+    assert "[STUB]" not in body["answer_text"]
+    assert body["execution_trace"]["execution_status"] == "completed"
+    assert body["execution_trace"]["model_version"] == "SmolVLM-256M-Instruct"
 
 
 # ── 6. Query retrieval works ─────────────────────────────────────────
