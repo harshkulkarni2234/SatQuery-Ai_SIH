@@ -5,6 +5,7 @@ import { useSpecialists, findSpecialist, specialistBadgeLabel } from "../../lib/
 import { reportPdfUrl, reportJsonUrl } from "../../api.js";
 import ResultContent from "./ResultContent.jsx";
 import TechnicalDetails from "./TechnicalDetails.jsx";
+import InputMetadataPanel from "./InputMetadataPanel.jsx";
 import WarningsBanner from "../common/WarningsBanner.jsx";
 
 export default function AnalysisResult({ result, images, onBack }) {
@@ -88,6 +89,7 @@ export default function AnalysisResult({ result, images, onBack }) {
           )}
         </div>
         <WarningsBanner warnings={result?.warnings} />
+        <InputMetadataPanel images={images} />
         <ResultContent result={result} images={images} />
       </div>
       <TechnicalDetails result={result} />

@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { fmtConfidence } from "../../lib/format.js";
+import { useSpecialists, findSpecialist } from "../../lib/useSpecialists.js";
 import ConfidenceMeta from "../common/ConfidenceMeta.jsx";
 import ViewerToggles from "../common/ViewerToggles.jsx";
 import OverlayImage from "../common/OverlayImage.jsx";
 import Stat from "../common/Stat.jsx";
+
+const ALIGNMENT_LABEL = {
+  geographic_reprojection: "Geographic reprojection (real CRS/grid alignment)",
+  phase_correlation: "Phase-correlation translation alignment",
+  none: "None (images already matched, or alignment was not attempted)",
+};
 
 export default function ChangeResult({ result, images }) {
   const meta = result.metadata || {};
@@ -14,6 +21,11 @@ export default function ChangeResult({ result, images }) {
     images.length >= 2 ? [images[0], images[1]] : [images[0], images[0]];
   const confidence = fmtConfidence(result.confidence_score);
   const unavailable = meta.validation_failed === true;
+
+  const specialists = useSpecialists();
+  const spec = findSpecialist(specialists, meta.specialist_id);
+  const methodLabel =
+    spec?.kind === "learned_model" ? "Semantic model used" : "Pixel-level deterministic method";
 
   if (unavailable) {
     return (
@@ -103,14 +115,23 @@ export default function ChangeResult({ result, images }) {
 
       <div className="report-section">
         <h3 className="result-section-title">Change statistics</h3>
+        <div className="method-badge">{methodLabel}</div>
         <div className="stat-grid">
           <Stat
             label="Changed area"
             value={meta.change_percentage != null ? `${meta.change_percentage}%` : undefined}
           />
+          <Stat
+            label="Changed area (m²)"
+            value={meta.changed_area_m2 != null ? meta.changed_area_m2.toLocaleString() : undefined}
+          />
           <Stat label="Changed pixels" value={meta.changed_pixels} />
           <Stat label="Total pixels" value={meta.total_pixels} />
           <Stat label="Regions" value={meta.num_regions} />
+          <Stat
+            label="Alignment method"
+            value={meta.alignment_method ? ALIGNMENT_LABEL[meta.alignment_method] || meta.alignment_method : undefined}
+          />
         </div>
         {regions.length > 0 && (
           <>
@@ -139,12 +160,6 @@ export default function ChangeResult({ result, images }) {
               </tbody>
             </table>
           </>
-        )}
-        {meta.registration_applied && (
-          <p className="note">
-            Images were translation-aligned before differencing to remove small
-            spatial offsets.
-          </p>
         )}
         <p className="note evidence-note">
           Change statistics are measured from the cleaned pixel-difference mask;

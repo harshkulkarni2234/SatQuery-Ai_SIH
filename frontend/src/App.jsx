@@ -75,15 +75,16 @@ export default function App() {
   }
 
   function updateImage(index, patch) {
-    let updated = null;
-    setImages((prev) =>
-      prev.map((it, i) => {
-        if (i !== index) return it;
-        updated = { ...it, ...patch };
-        return updated;
-      })
-    );
-    if (updated && ("modality" in patch || "captureDate" in patch)) {
+    // Read the current item from the `images` closure (fresh each render)
+    // rather than trying to capture it from inside the setImages updater —
+    // that updater callback runs asynchronously, not synchronously within
+    // this call, so a variable set inside it isn't populated yet by the
+    // time code right after setImages() runs.
+    const current = images[index];
+    if (!current) return;
+    const updated = { ...current, ...patch };
+    setImages((prev) => prev.map((it, i) => (i === index ? updated : it)));
+    if ("modality" in patch || "captureDate" in patch) {
       uploadItem(updated.key, updated.file, updated.modality, updated.captureDate);
     }
   }

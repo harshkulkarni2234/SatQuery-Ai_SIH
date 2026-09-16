@@ -41,8 +41,38 @@ export default function CrossModalResult({ result, images }) {
   const opticalVisible = viewer !== "sar";
   const sarVisible = viewer !== "optical";
 
+  const coregistration = result.compatibility?.coregistration;
+  const COREG_LABEL = {
+    verified: "Co-registration verified — pixel grids provably match",
+    assumed: "Co-registration assumed (from dataset flag, not independently verified)",
+    unverified: "Co-registration unverified — evidence is reported per sensor, not pixel-aligned",
+    failed: "Co-registration check failed",
+  };
+
   return (
     <div className="result-block">
+      {coregistration && (
+        <div className={`coregistration-banner coregistration-${coregistration}`}>
+          {COREG_LABEL[coregistration] || coregistration}
+        </div>
+      )}
+
+      <div className="modality-legend">
+        <span className="modality-legend-item">
+          <span className="modality-legend-dot" style={{ background: "#2563eb" }} />
+          Optical-only evidence{opticalStats.length === 0 ? " (none produced)" : ""}
+        </span>
+        <span className="modality-legend-item">
+          <span className="modality-legend-dot" style={{ background: "#9333ea" }} />
+          SAR-only evidence{sarStats.length === 0 ? " (none produced)" : ""}
+        </span>
+        <span className="modality-legend-item">
+          <span className="modality-legend-dot" style={{ background: "#16a34a" }} />
+          Combined (both modalities)
+          {!(combined.combined_readings?.length > 0) ? " (none produced)" : ""}
+        </span>
+      </div>
+
       <div className="report-section">
         <h3 className="result-section-title">Spatial evidence</h3>
         <ViewerToggles

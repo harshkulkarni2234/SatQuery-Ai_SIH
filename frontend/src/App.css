@@ -1217,6 +1217,101 @@ input:focus {
 }
 
 /* Honest fallback + caption cues */
+.input-metadata-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.input-metadata-card {
+  flex: 1 1 220px;
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: var(--rad);
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.input-metadata-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.input-metadata-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+}
+.input-metadata-grid .meta-key {
+  font-size: 9px;
+}
+.input-metadata-grid .meta-val {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  word-break: break-word;
+}
+.input-metadata-extent {
+  grid-column: 1 / -1;
+}
+
+.method-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-bottom: 10px;
+}
+.coregistration-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 8px 12px;
+  border-radius: var(--rad);
+  margin-bottom: 10px;
+}
+.coregistration-verified {
+  background: var(--ok-soft, #f0fdf4);
+  color: var(--ok);
+  border: 1px solid var(--ok-line, #bbf7d0);
+}
+.coregistration-assumed,
+.coregistration-unverified {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+.coregistration-failed {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid var(--danger-line);
+}
+.modality-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.modality-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.modality-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
 .notice-block {
   margin-top: -4px;
   font-size: 13px;
