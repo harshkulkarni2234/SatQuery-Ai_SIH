@@ -227,7 +227,10 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                     f"Image file for '{missing[0].filename}' is missing on disk."
                 )
             specialist_result = selected_entry.handler(
-                optical_img.file_path, sar_img.file_path, body.query_text
+                optical_img.file_path,
+                sar_img.file_path,
+                body.query_text,
+                coregistration=plan.compatibility.coregistration if plan.compatibility else None,
             )
             legacy = specialist_result_to_legacy_response_fields(specialist_result)
             answer_text = legacy["answer_text"]
@@ -242,7 +245,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 "spatial_correspondence_note": specialist_result.evidence.get(
                     "spatial_correspondence_note"
                 ),
-                "evidence": specialist_result.evidence.get("per_modality"),
+                "evidence": specialist_result.evidence.get("modality_evidence"),
             }
 
         else:

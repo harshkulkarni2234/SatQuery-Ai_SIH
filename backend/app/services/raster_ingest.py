@@ -19,7 +19,7 @@ import numpy as np
 import rasterio
 from PIL import Image as PILImage, UnidentifiedImageError
 from rasterio.errors import RasterioIOError
-from rasterio.warp import transform_bounds
+from rasterio.warp import reproject, transform_bounds, Resampling
 
 from app.contracts import RasterMetadata
 
@@ -270,3 +270,35 @@ def percentile_stretch_to_uint8(arr: np.ndarray, low: float = 2.0, high: float =
         else:
             out = stretched.astype(np.uint8)
     return out
+
+
+def reproject_to_reference(
+    src_path: str,
+    ref_transform,
+    ref_crs,
+    ref_width: int,
+    ref_height: int,
+    band_indices: Optional[list[int]] = None,
+) -> "np.ndarray":
+    """Reproject *src_path* onto a reference grid (transform/crs/shape) via
+    rasterio.warp.reproject — real geographic alignment (Phase B7/B9), not a
+    pixel-offset guess. Returns an array shaped (bands, ref_height, ref_width)
+    in the source's native dtype. Raises on failure (e.g. no CRS on either
+    side) — callers should catch and fall back to unaligned/per-sensor
+    handling rather than silently claiming alignment.
+    """
+    with rasterio.open(src_path) as src:
+        if not src.crs:
+            raise ValueError(f"{src_path} has no CRS; cannot reproject")
+        indices = band_indices or list(range(1, src.count + 1))
+        dst = np.zeros((len(indices), ref_height, ref_width), dtype=src.dtypes[0])
+        reproject(
+            source=src.read(indices),
+            destination=dst,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=ref_transform,
+            dst_crs=ref_crs,
+            resampling=Resampling.bilinear,
+        )
+        return dst

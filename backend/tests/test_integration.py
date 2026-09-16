@@ -359,7 +359,7 @@ class TestStubs:
         assert body["confidence_score"] is None
         assert body["bounding_boxes"] is None
         assert body["execution_trace"]["execution_status"] == "completed"
-        assert body["execution_trace"]["model_version"] == "cross-modal-deterministic-v1"
+        assert body["execution_trace"]["model_version"] == "cross-modal-deterministic-v2"
         assert body["metadata"]["specialist"] == "cross_modal"
         assert "modality_contribution_note" in body["metadata"]
         assert "optical" in body["metadata"]["modality_contribution_note"].lower()

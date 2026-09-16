@@ -28,7 +28,7 @@ def test_analyze_pair_returns_structured_output(tmp_path):
     assert result["execution_status"] == "completed"
 
     evidence = result["evidence"]
-    assert set(evidence) == {"optical", "sar", "combined"}
+    assert set(evidence) == {"optical", "sar", "combined", "per_modality"}
 
     optical = evidence["optical"]
     assert optical["vegetation_green_dominance"] == 1.0

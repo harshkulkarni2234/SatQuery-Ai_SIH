@@ -51,7 +51,11 @@ class Query(Base):
     # failed queries (see app/services/trace.py) so failures stay auditable.
     trace_events = Column(JSONB)
     compatibility = Column(JSONB)
-    confidence_source = Column(String(50))
+    # Widened in B9 after a real 500 (StringDataRightTruncation): a
+    # confidence_source describing a real computed quantity (e.g. "optical/
+    # SAR pixel mask agreement") can legitimately run longer than a short
+    # enum-like label such as "bbox fill ratio".
+    confidence_source = Column(String(200))
     warnings = Column(JSONB)
     used_fallback = Column(Boolean)
     specialist_id = Column(String(100))

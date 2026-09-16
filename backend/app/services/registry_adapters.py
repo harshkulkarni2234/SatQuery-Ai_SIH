@@ -120,18 +120,25 @@ def run_change_detection(
     )
 
 
-def run_cross_modal(optical_path: str, sar_path: str, query_text: str = "") -> SpecialistResult:
-    result = cross_modal.analyze_pair(optical_path, sar_path, query_text)
+def run_cross_modal(
+    optical_path: str, sar_path: str, query_text: str = "", coregistration: str | None = None
+) -> SpecialistResult:
+    result = cross_modal.analyze_pair(optical_path, sar_path, query_text, coregistration=coregistration)
 
     return SpecialistResult(
         answer=result["answer_text"],
         evidence={
-            "per_modality": result.get("evidence"),
+            # NOTE: "modality_evidence" is the {optical, sar, combined,
+            # per_modality} dict from cross_modal.py itself (its own
+            # per_modality key is the B9 fusion-attribution sub-dict) — kept
+            # under a differently-named key here to avoid nesting confusion
+            # with SpecialistResult.evidence's own shape.
+            "modality_evidence": result.get("evidence"),
             "modality_contribution_note": result.get("modality_contribution_note"),
             "spatial_correspondence_note": result.get("spatial_correspondence_note"),
         },
         confidence=result.get("confidence_score"),
-        confidence_source="unavailable" if result.get("confidence_score") is None else "model-reported",
+        confidence_source=result.get("confidence_source", "unavailable"),
         model_or_tool="cross_modal.feature_fusion",
         model_version=result.get("model_version"),
         used_fallback=False,
