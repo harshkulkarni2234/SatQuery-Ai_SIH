@@ -5,9 +5,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
+from app.contracts import RasterMetadata
 from app.database import get_db
 from app.models import Image
-from app.schemas import ImageUploadResponse
+from app.schemas import ImageDetailResponse, ImageUploadResponse
+from app.services.raster_ingest import RasterIngestError, extract_metadata
 
 router = APIRouter(prefix="/images", tags=["images"])
 
@@ -17,6 +19,39 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploaded
 
 def _ensure_data_dir():
     os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def _image_to_metadata(image: Image) -> RasterMetadata | None:
+    if image.file_format is None:
+        return None
+
+    # resolution (x, y) is derived from the stored transform when available,
+    # since only a single resolution_m (x) column exists on the images table.
+    if image.transform:
+        resolution = (abs(image.transform[0]), abs(image.transform[4]))
+    elif image.resolution_m is not None:
+        resolution = (image.resolution_m, image.resolution_m)
+    else:
+        resolution = None
+
+    return RasterMetadata(
+        format=image.file_format,
+        width=image.width,
+        height=image.height,
+        band_count=image.band_count,
+        dtype=image.dtype,
+        crs=image.crs,
+        bounds=tuple(image.bounds) if image.bounds else None,
+        bounds_wgs84=tuple(image.bounds_wgs84) if image.bounds_wgs84 else None,
+        resolution=resolution,
+        transform=tuple(image.transform) if image.transform else None,
+        nodata=image.nodata,
+        acquisition_date=image.capture_date,
+        acquisition_date_source=image.acquisition_date_source or "unknown",
+        is_georeferenced=bool(image.is_georeferenced),
+        file_size_bytes=image.file_size_bytes,
+        warnings=image.metadata_warnings or [],
+    )
 
 
 @router.post("/upload", response_model=ImageUploadResponse)
@@ -44,11 +79,33 @@ def upload_image(
         content = file.file.read()
         f.write(content)
 
+    try:
+        metadata = extract_metadata(file_path, user_capture_date=capture_date)
+    except RasterIngestError as exc:
+        os.remove(file_path)
+        raise HTTPException(status_code=400, detail=str(exc))
+
     image = Image(
         filename=file.filename,
         modality=modality_upper,
-        capture_date=capture_date,
+        capture_date=metadata.acquisition_date,
         file_path=file_path,
+        crs=metadata.crs,
+        bbox_coords=list(metadata.bounds) if metadata.bounds else None,
+        resolution_m=metadata.resolution[0] if metadata.resolution else None,
+        width=metadata.width,
+        height=metadata.height,
+        band_count=metadata.band_count,
+        dtype=metadata.dtype,
+        bounds=list(metadata.bounds) if metadata.bounds else None,
+        bounds_wgs84=list(metadata.bounds_wgs84) if metadata.bounds_wgs84 else None,
+        transform=list(metadata.transform) if metadata.transform else None,
+        nodata=metadata.nodata,
+        file_format=metadata.format,
+        is_georeferenced=metadata.is_georeferenced,
+        acquisition_date_source=metadata.acquisition_date_source,
+        file_size_bytes=metadata.file_size_bytes,
+        metadata_warnings=metadata.warnings or None,
     )
     db.add(image)
     db.commit()
@@ -60,4 +117,22 @@ def upload_image(
         modality=image.modality,
         crs=image.crs,
         resolution_m=image.resolution_m,
+        metadata=metadata,
+    )
+
+
+@router.get("/{image_id}", response_model=ImageDetailResponse)
+def get_image(image_id: uuid.UUID, db: Session = Depends(get_db)):
+    image = db.get(Image, image_id)
+    if image is None:
+        raise HTTPException(status_code=404, detail=f"Image {image_id} not found")
+
+    return ImageDetailResponse(
+        image_id=image.id,
+        filename=image.filename,
+        modality=image.modality,
+        capture_date=image.capture_date,
+        crs=image.crs,
+        resolution_m=image.resolution_m,
+        metadata=_image_to_metadata(image),
     )

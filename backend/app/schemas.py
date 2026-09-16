@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.contracts import RasterMetadata
+
 
 # ── Image upload ──────────────────────────────────────────────────────
 
@@ -15,6 +17,17 @@ class ImageUploadResponse(BaseModel):
     modality: str
     crs: Optional[str] = None
     resolution_m: Optional[float] = None
+    metadata: Optional[RasterMetadata] = None
+
+
+class ImageDetailResponse(BaseModel):
+    image_id: uuid.UUID
+    filename: str
+    modality: str
+    capture_date: Optional[date] = None
+    crs: Optional[str] = None
+    resolution_m: Optional[float] = None
+    metadata: Optional[RasterMetadata] = None
 
 
 # ── Query ─────────────────────────────────────────────────────────────

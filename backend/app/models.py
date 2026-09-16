@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from sqlalchemy import Column, String, Text, Float, Integer, Date, DateTime, ForeignKey, func
+from sqlalchemy import Boolean, Column, String, Text, Float, Integer, Date, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from app.database import Base
 
@@ -13,10 +13,25 @@ class Image(Base):
     modality = Column(String(20), nullable=False)
     capture_date = Column(Date)
     file_path = Column(Text, nullable=False)
-    crs = Column(String(50))
+    crs = Column(String(255))
     bbox_coords = Column(JSONB)
     resolution_m = Column(Float)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Added in A2 — real raster metadata (see app/contracts.py RasterMetadata)
+    width = Column(Integer)
+    height = Column(Integer)
+    band_count = Column(Integer)
+    dtype = Column(String(20))
+    bounds = Column(JSONB)
+    bounds_wgs84 = Column(JSONB)
+    transform = Column(JSONB)
+    nodata = Column(Float)
+    file_format = Column(String(20))
+    is_georeferenced = Column(Boolean, default=False)
+    acquisition_date_source = Column(String(20))
+    file_size_bytes = Column(Integer)
+    metadata_warnings = Column(JSONB)
 
 
 class Query(Base):
