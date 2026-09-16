@@ -10,3 +10,4 @@ opencv-python-headless
 numpy
 requests
 rasterio
+reportlab
