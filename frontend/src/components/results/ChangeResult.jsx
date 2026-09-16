@@ -1,0 +1,161 @@
+import { useState } from "react";
+import { fmtConfidence } from "../../lib/format.js";
+import ConfidenceMeta from "../common/ConfidenceMeta.jsx";
+import ViewerToggles from "../common/ViewerToggles.jsx";
+import OverlayImage from "../common/OverlayImage.jsx";
+import Stat from "../common/Stat.jsx";
+
+export default function ChangeResult({ result, images }) {
+  const meta = result.metadata || {};
+  const boxes = result.bounding_boxes || [];
+  const regions = meta.regions || [];
+  const [viewer, setViewer] = useState("overlay");
+  const [before, after] =
+    images.length >= 2 ? [images[0], images[1]] : [images[0], images[0]];
+  const confidence = fmtConfidence(result.confidence_score);
+  const unavailable = meta.validation_failed === true;
+
+  if (unavailable) {
+    return (
+      <div className="result-block">
+        <div className="result-section">
+          <h3 className="result-section-title">Analysis</h3>
+          <div className="answer-text">{result.answer_text}</div>
+        </div>
+        <div className="notice-block">
+          The change-detection pipeline refused a percentage here rather than
+          fabricate one: reliable comparison requires the two images to cover
+          the same geographic area. Upload a co-registered before/after pair.
+        </div>
+        <div className="result-meta">
+          <ConfidenceMeta value={confidence} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="result-block">
+      <div className="result-section">
+        <h3 className="result-section-title">Analysis</h3>
+        <div className="answer-text">{result.answer_text}</div>
+      </div>
+
+      <div className="report-section">
+        <h3 className="result-section-title">Spatial evidence</h3>
+        <ViewerToggles
+          label="Layers"
+          value={viewer}
+          onChange={setViewer}
+          options={[
+            ...(result.overlay_url
+              ? [{ value: "overlay", label: "Change overlay" }]
+              : []),
+            { value: "annotated", label: "Changed regions" },
+            { value: "plain", label: "Before / After" },
+            { value: "mask", label: "Change mask" },
+          ]}
+        />
+        {viewer === "mask" ? (
+          <div className="mask-view">
+            {result.change_mask_url && (
+              <figure className="evidence-figure mask">
+                <figcaption>Change mask</figcaption>
+                <img src={result.change_mask_url} alt="Change mask" />
+              </figure>
+            )}
+            <p className="mask-explainer">
+              Highlighted pixels in the change mask represent detected
+              differences according to the current deterministic method.
+            </p>
+          </div>
+        ) : viewer === "overlay" && result.overlay_url ? (
+          <figure className="evidence-figure">
+            <figcaption>After image · changed pixels highlighted</figcaption>
+            <img
+              src={result.overlay_url}
+              alt="Change overlay on the after image"
+              className="evidence-img"
+            />
+          </figure>
+        ) : (
+          <div className="evidence-grid">
+            <figure className="evidence-figure">
+              <figcaption>Before</figcaption>
+              <OverlayImage src={before.url} alt="Image before" boxes={[]} />
+            </figure>
+            <figure className="evidence-figure">
+              <figcaption>After</figcaption>
+              <OverlayImage
+                src={after.url}
+                alt="Image after"
+                boxes={boxes}
+                labelPrefix="Changed Region"
+                showBoxes={
+                  viewer === "annotated" ||
+                  (viewer === "overlay" && !result.overlay_url)
+                }
+              />
+            </figure>
+          </div>
+        )}
+      </div>
+
+      <div className="report-section">
+        <h3 className="result-section-title">Change statistics</h3>
+        <div className="stat-grid">
+          <Stat
+            label="Changed area"
+            value={meta.change_percentage != null ? `${meta.change_percentage}%` : undefined}
+          />
+          <Stat label="Changed pixels" value={meta.changed_pixels} />
+          <Stat label="Total pixels" value={meta.total_pixels} />
+          <Stat label="Regions" value={meta.num_regions} />
+        </div>
+        {regions.length > 0 && (
+          <>
+            <h4 className="sub-title">Changed regions</h4>
+            <table className="box-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Area</th>
+                  <th>x min</th>
+                  <th>y min</th>
+                  <th>x max</th>
+                  <th>y max</th>
+                </tr>
+              </thead>
+              <tbody>
+                {regions.map((r, i) => (
+                  <tr key={i}>
+                    <td>{i + 1}</td>
+                    <td>{r.area_pct != null ? `${r.area_pct}%` : "—"}</td>
+                    {r.box.map((v, j) => (
+                      <td key={j}>{v}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        {meta.registration_applied && (
+          <p className="note">
+            Images were translation-aligned before differencing to remove small
+            spatial offsets.
+          </p>
+        )}
+        <p className="note evidence-note">
+          Change statistics are measured from the cleaned pixel-difference mask;
+          they describe pixel-level visual differences, not semantic change.
+          Field verification is recommended before operational use.
+        </p>
+      </div>
+
+      <div className="result-meta">
+        <ConfidenceMeta value={confidence} />
+      </div>
+    </div>
+  );
+}
