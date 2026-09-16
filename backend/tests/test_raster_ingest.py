@@ -138,6 +138,17 @@ def test_huge_raster_warns_but_does_not_read_pixels(tmp_path, monkeypatch):
     assert any("exceeding max_raster_pixels" in w.lower() for w in meta.warnings)
 
 
+def test_huge_png_warns_too(tmp_path, monkeypatch):
+    """Phase A8: the pixel-count guard previously only ran on the GeoTIFF
+    path, so a huge PNG/JPG upload had no size warning at all."""
+    monkeypatch.setattr(raster_ingest, "MAX_RASTER_PIXELS", 100)
+    path = str(tmp_path / "big.png")
+    PILImage.new("RGB", (16, 16), color=(1, 2, 3)).save(path)
+    meta = extract_metadata(path)
+
+    assert any("exceeding max_raster_pixels" in w.lower() for w in meta.warnings)
+
+
 def test_load_rgb_preview_geotiff_rgb(tmp_path):
     path = str(tmp_path / "preview.tif")
     _write_geotiff(path, width=32, height=32, band_count=3)

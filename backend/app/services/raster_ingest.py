@@ -171,6 +171,16 @@ def _extract_plain_image_metadata(path: str, ext: str, user_capture_date: Option
         acquisition_date_source = "unknown"
         warnings.append("No acquisition date available (format carries no date metadata)")
 
+    # Phase A8: this guard previously only ran for the GeoTIFF path, so a
+    # huge PNG/JPG upload had no size warning at all — added here too for
+    # parity (the pixel data itself is still never read at this stage).
+    pixel_count = width * height
+    if pixel_count > MAX_RASTER_PIXELS:
+        warnings.append(
+            f"Image has {pixel_count:,} pixels, exceeding MAX_RASTER_PIXELS "
+            f"({MAX_RASTER_PIXELS:,}); downstream analysis may be slow or be rejected"
+        )
+
     return RasterMetadata(
         format=ext.lstrip(".").upper(),
         width=width,

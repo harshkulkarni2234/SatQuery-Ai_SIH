@@ -12,7 +12,13 @@ def test_health():
     client = TestClient(app)
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    # database is a real connectivity check (test DB is up); vqa_worker and
+    # semantic_change_model depend on external process state not fixed here.
+    assert body["status"] in ("ok", "degraded")
+    assert body["database"] == "up"
+    assert body["vqa_worker"] in ("up", "down")
+    assert body["semantic_change_model"] in ("available", "unavailable")
 
 
 # ── 2. Image upload accepts valid image ──────────────────────────────

@@ -16,6 +16,13 @@ router = APIRouter(prefix="/images", tags=["images"])
 ALLOWED_EXTENSIONS = {".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp", ".jp2"}
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "uploaded_images")
 
+# Phase A8: previously unbounded — file.file.read() would load the entire
+# upload into memory regardless of size. Read in chunks and reject (413)
+# once this many bytes have been seen, rather than trusting a possibly-
+# absent Content-Length header.
+MAX_UPLOAD_SIZE_BYTES = int(os.environ.get("MAX_UPLOAD_SIZE_BYTES", 200 * 1024 * 1024))  # 200 MB
+_UPLOAD_CHUNK_SIZE = 1024 * 1024  # 1 MB
+
 
 def _ensure_data_dir():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -75,9 +82,24 @@ def upload_image(
     _ensure_data_dir()
     stored_name = f"{uuid.uuid4().hex}{ext}"
     file_path = os.path.join(DATA_DIR, stored_name)
-    with open(file_path, "wb") as f:
-        content = file.file.read()
-        f.write(content)
+    total_bytes = 0
+    try:
+        with open(file_path, "wb") as f:
+            while chunk := file.file.read(_UPLOAD_CHUNK_SIZE):
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"File exceeds maximum upload size of "
+                            f"{MAX_UPLOAD_SIZE_BYTES:,} bytes"
+                        ),
+                    )
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     try:
         metadata = extract_metadata(file_path, user_capture_date=capture_date)
