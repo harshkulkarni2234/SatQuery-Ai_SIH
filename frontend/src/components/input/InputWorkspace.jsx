@@ -1,8 +1,9 @@
 import { useRef } from "react";
 import { IconUpload, IconPlay, IconPlus } from "../icons/index.jsx";
-import { SCENARIOS } from "../../constants/scenarios.js";
+import { SCENARIOS, imageCombo } from "../../constants/scenarios.js";
 import { pairSummary } from "../../lib/format.js";
 import ImageCard from "./ImageCard.jsx";
+import ErrorPanel from "../common/ErrorPanel.jsx";
 
 const MAX_IMAGES = 2;
 
@@ -40,9 +41,13 @@ export default function InputWorkspace({
   setQueryText,
   onAnalyze,
   error,
+  errorDetail,
 }) {
   const fileRef = useRef(null);
   const pickFiles = () => fileRef.current && fileRef.current.click();
+  const combo = imageCombo(images);
+  const examples = combo ? SCENARIOS.filter((s) => s.combo === combo) : SCENARIOS;
+  const canSubmit = queryText.trim().length > 0 && !images.some((it) => it.uploading);
   return (
     <div className="input-workspace fade-in">
       <div className="workspace-hero">
@@ -124,35 +129,39 @@ export default function InputWorkspace({
           />
         </section>
 
-        {error && <div className="error-banner">{error}</div>}
+        {error && (
+          errorDetail && typeof errorDetail === "object" ? (
+            <ErrorPanel message={error} detail={errorDetail} />
+          ) : (
+            <div className="error-banner">{error}</div>
+          )
+        )}
 
         <button
           className="btn-analyze"
           onClick={onAnalyze}
-          disabled={images.some((it) => it.uploading)}
+          disabled={!canSubmit}
         >
           <IconPlay size={15} />{" "}
           {images.some((it) => it.uploading) ? "Uploading…" : "Analyze"}
         </button>
       </div>
 
-      {images.length === 0 && (
-        <div className="demo-queries">
-          <span className="demo-label">Try an example</span>
-          <div className="preset-row">
-            {SCENARIOS.map((s) => (
-              <button
-                key={s.label}
-                className="preset-btn"
-                onClick={() => setQueryText(s.query)}
-              >
-                <span className="preset-title">{s.label}</span>
-                <span className="preset-desc">{s.description}</span>
-              </button>
-            ))}
-          </div>
+      <div className="demo-queries">
+        <span className="demo-label">Try an example</span>
+        <div className="preset-row">
+          {examples.map((s) => (
+            <button
+              key={s.label}
+              className="preset-btn"
+              onClick={() => setQueryText(s.query)}
+            >
+              <span className="preset-title">{s.label}</span>
+              <span className="preset-desc">{s.description}</span>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

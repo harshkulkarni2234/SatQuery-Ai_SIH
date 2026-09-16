@@ -11,6 +11,7 @@ export default function App() {
   const [images, setImages] = useState([]);
   const [queryText, setQueryText] = useState("");
   const [error, setError] = useState(null);
+  const [errorDetail, setErrorDetail] = useState(null);
   const [result, setResult] = useState(null);
   const [view, setView] = useState("input"); // input | waiting | trace | ready | result
   const [selectedTask, setSelectedTask] = useState(null);
@@ -53,6 +54,7 @@ export default function App() {
 
   function addFiles(fileList) {
     setError(null);
+    setErrorDetail(null);
     const files = fileList.filter((f) => f && f.size > 0);
     if (!files.length) return;
     const newItems = files.map((file) => ({
@@ -92,6 +94,7 @@ export default function App() {
 
   async function handleAnalyze() {
     setError(null);
+    setErrorDetail(null);
     if (!queryText.trim()) {
       setError("Please enter a question before analyzing.");
       return;
@@ -127,6 +130,7 @@ export default function App() {
       setError(
         err instanceof ApiError ? err.message : `Unexpected error: ${err.message}`
       );
+      setErrorDetail(err instanceof ApiError ? err.detail : null);
     }
   }
 
@@ -156,6 +160,7 @@ export default function App() {
             setQueryText={setQueryText}
             onAnalyze={handleAnalyze}
             error={error}
+            errorDetail={errorDetail}
           />
         )}
         {view === "waiting" && <AgentSelection key="waiting" />}
@@ -179,6 +184,7 @@ export default function App() {
               setResult(null);
               setSelectedTask(null);
               setError(null);
+              setErrorDetail(null);
             }}
           />
         )}
