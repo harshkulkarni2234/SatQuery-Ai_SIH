@@ -29,6 +29,7 @@ from app.services.compatibility import (
 from app.services.registry import RegistryEntry
 from app.services.registry import select as select_specialist
 from app.services.router import GROUNDING_TARGETS, classify_query
+from app.services.trace import TraceRecorder
 
 _COUNT_RE = re.compile(r"\bhow many\b", re.IGNORECASE)
 _PRESENCE_RE = re.compile(
@@ -74,6 +75,7 @@ def build_plan(
     query_text: str,
     images: list[dict],
     intent_classifier: IntentClassifier = _default_intent_classifier,
+    recorder: Optional[TraceRecorder] = None,
 ) -> PlanResult:
     """Build a full ExecutionPlan for *query_text* against *images*.
 
@@ -81,10 +83,19 @@ def build_plan(
     crs, bounds_wgs84, resolution, transform, width, height (whatever each
     check actually needs — see services/compatibility.py and
     services/registry.py for which keys they read).
+
+    If *recorder* is given, INPUT_VALIDATION, COMPATIBILITY, TASK_SELECTED
+    and SPECIALIST_SELECTED steps are recorded with real timings as this
+    function does the actual work (Phase A6) — nothing here is simulated.
     """
     query_text = (query_text or "").strip()
 
+    if recorder:
+        recorder.start("INPUT_VALIDATION")
+
     if not query_text:
+        if recorder:
+            recorder.record("INPUT_VALIDATION", "FAILED", "Query cannot be empty.")
         return PlanResult(
             plan=ExecutionPlan(
                 task=None,
@@ -103,6 +114,8 @@ def build_plan(
 
     if not classification["validation_passed"]:
         suggestion = _suggestion_for(classification, len(images))
+        if recorder:
+            recorder.record("INPUT_VALIDATION", "FAILED", classification["reason"], {"task": task})
         return PlanResult(
             plan=ExecutionPlan(
                 task=task,
@@ -115,6 +128,11 @@ def build_plan(
             selected_entry=None,
         )
 
+    if recorder:
+        recorder.record("INPUT_VALIDATION", "PASSED", classification["reason"])
+        recorder.record("TASK_SELECTED", "COMPLETED", f"Classified as {task}", {"task": task, "target": target})
+        recorder.start("COMPATIBILITY")
+
     compatibility = None
     if task == "CHANGE_DETECTION":
         compatibility = check_temporal_pair(images[0], images[1])
@@ -124,6 +142,17 @@ def build_plan(
         compatibility = check_optical_sar_pair(optical, sar)
     elif task in ("VQA", "GROUNDING") and images:
         compatibility = check_single_image(images[0])
+
+    if compatibility is not None and recorder:
+        recorder.record(
+            "COMPATIBILITY",
+            "PASSED" if compatibility.ok else "FAILED",
+            f"{sum(1 for c in compatibility.checks if c.status == 'FAIL')} check(s) failed"
+            if not compatibility.ok
+            else "All compatibility checks passed",
+        )
+    elif recorder:
+        recorder.record("COMPATIBILITY", "SKIPPED", "No compatibility check applies to this task")
 
     if compatibility is not None and not compatibility.ok:
         return PlanResult(
@@ -139,7 +168,16 @@ def build_plan(
             selected_entry=None,
         )
 
+    if recorder:
+        recorder.start("SPECIALIST_SELECTED")
     entry, selection_reason, rejected = select_specialist(task, images)
+    if recorder:
+        recorder.record(
+            "SPECIALIST_SELECTED",
+            "COMPLETED" if entry else "FAILED",
+            selection_reason,
+            {"specialist_id": entry.spec.id if entry else None, "rejected": rejected},
+        )
     parameters = _whitelisted_parameters(task, target)
 
     plan = ExecutionPlan(

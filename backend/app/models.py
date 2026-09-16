@@ -47,6 +47,15 @@ class Query(Base):
     execution_time_ms = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Added in A6 — real execution trace, persisted for BOTH successful and
+    # failed queries (see app/services/trace.py) so failures stay auditable.
+    trace_events = Column(JSONB)
+    compatibility = Column(JSONB)
+    confidence_source = Column(String(50))
+    warnings = Column(JSONB)
+    used_fallback = Column(Boolean)
+    specialist_id = Column(String(100))
+
 
 class QueryResult(Base):
     __tablename__ = "query_results"

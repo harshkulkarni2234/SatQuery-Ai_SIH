@@ -11,6 +11,7 @@ from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
 from app.services.router import extract_grounding_target
 from app.services.planner import build_plan
+from app.services.trace import TraceRecorder
 
 router = APIRouter(tags=["query"])
 
@@ -25,6 +26,21 @@ def _tracked_exception_for_plan(plan, status_code: int) -> HTTPException:
     if plan.compatibility is not None:
         detail["compatibility"] = plan.compatibility.model_dump()
     return HTTPException(status_code=status_code, detail=detail)
+
+
+def _persist_failed_query(
+    db: Session, body: QueryRequest, recorder: TraceRecorder, task: str | None
+) -> None:
+    """Persist a Query row for a failed request so it stays auditable
+    (Phase A6). No QueryResult is created — there is no answer."""
+    query_record = Query(
+        query_text=body.query_text,
+        image_ids=body.image_ids,
+        task_classified=task,
+        trace_events=recorder.as_dicts(),
+    )
+    db.add(query_record)
+    db.commit()
 
 
 def _compat_dict(img: Image) -> dict:
@@ -48,23 +64,32 @@ def _compat_dict(img: Image) -> dict:
 
 @router.post("/query", response_model=QueryResponse)
 def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_db)):
+    recorder = TraceRecorder()
+    recorder.start("QUERY_RECEIVED")
+
     images = db.query(Image).filter(Image.id.in_(body.image_ids)).all()
     found_ids = {str(img.id) for img in images}
     missing = [str(i) for i in body.image_ids if str(i) not in found_ids]
     if missing:
+        recorder.record("QUERY_RECEIVED", "FAILED", f"Image(s) not found: {', '.join(missing)}")
+        recorder.error(f"Image(s) not found: {', '.join(missing)}")
+        _persist_failed_query(db, body, recorder, task=None)
         raise _tracked_exception(
             f"Image(s) not found: {', '.join(missing)}", status_code=404
         )
 
     by_id = {img.id: img for img in images}
     ordered_images = [by_id[i] for i in body.image_ids]
+    recorder.record("QUERY_RECEIVED", "COMPLETED", f"{len(ordered_images)} image(s) resolved")
 
     image_dicts = [{"id": str(img.id), **_compat_dict(img)} for img in ordered_images]
 
-    plan_result = build_plan(body.query_text, image_dicts)
+    plan_result = build_plan(body.query_text, image_dicts, recorder=recorder)
     plan = plan_result.plan
 
     if not plan.validation_passed:
+        recorder.error(plan.validation_reason, {"task": plan.task})
+        _persist_failed_query(db, body, recorder, task=plan.task)
         status_code = 422 if plan.compatibility is not None else 400
         raise _tracked_exception_for_plan(plan, status_code)
 
@@ -83,6 +108,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
     overlay_url = None
     overlay_path = None
 
+    recorder.start("EXECUTION")
     try:
         if task == "GROUNDING":
             img = ordered_images[0]
@@ -233,9 +259,15 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
             )
             model_version = None
             top_meta = {"specialist": "stub"}
-    except HTTPException:
+    except HTTPException as exc:
+        recorder.record("EXECUTION", "FAILED", str(exc.detail))
+        recorder.error(str(exc.detail), {"task": task})
+        _persist_failed_query(db, body, recorder, task=task)
         raise
     except Exception:
+        recorder.record("EXECUTION", "FAILED", "Unexpected error during specialist execution")
+        recorder.error("Specialist processing failed unexpectedly.", {"task": task})
+        _persist_failed_query(db, body, recorder, task=task)
         raise _tracked_exception(
             "Specialist processing failed. Please check that the uploaded "
             "images are valid and re-try."
@@ -249,18 +281,32 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         execution_status = "unavailable"
     else:
         execution_status = "completed"
+    recorder.record(
+        "EXECUTION",
+        "COMPLETED" if execution_status == "completed" else "PASSED",
+        f"{selected_entry.spec.id if selected_entry else task} finished ({execution_status})",
+    )
+    recorder.record(
+        "EVIDENCE",
+        "COMPLETED",
+        f"{len(bounding_boxes or [])} box(es), mask={'yes' if change_mask_path else 'no'}",
+    )
 
     used_fallback = bool(specialist_result and specialist_result.used_fallback) or bool(
         selected_entry and selected_entry.spec.is_fallback
     )
+    confidence_source = specialist_result.confidence_source if specialist_result else "unavailable"
+    warnings = specialist_result.warnings if specialist_result else []
     if selected_entry is not None:
         top_meta["specialist_id"] = selected_entry.spec.id
         top_meta["selection_reason"] = select_reason
         top_meta["rejected_specialists"] = rejected_specialists
         top_meta["used_fallback"] = used_fallback
-        top_meta["confidence_source"] = specialist_result.confidence_source
-        top_meta["warnings"] = specialist_result.warnings
+        top_meta["confidence_source"] = confidence_source
+        top_meta["warnings"] = warnings
     top_meta["plan"] = plan.model_dump()
+
+    recorder.record("RESULT", "COMPLETED", "Answer produced" if answer_text else "No answer produced")
 
     modalities_detected = [img.modality for img in ordered_images if img.modality in ("OPTICAL", "SAR")]
     trace = ExecutionTrace(
@@ -272,6 +318,8 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         reason=plan.validation_reason,
         execution_status=execution_status,
     )
+    trace_events = recorder.as_dicts()
+    compatibility = plan.compatibility
 
     query_record = Query(
         query_text=body.query_text,
@@ -281,6 +329,12 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         model_version=model_version,
         confidence_score=confidence,
         execution_time_ms=elapsed_ms,
+        trace_events=trace_events,
+        compatibility=compatibility.model_dump() if compatibility else None,
+        confidence_source=confidence_source,
+        warnings=warnings,
+        used_fallback=used_fallback,
+        specialist_id=selected_entry.spec.id if selected_entry else None,
     )
     db.add(query_record)
     db.flush()
@@ -296,6 +350,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
             "reason": plan.validation_reason,
             "execution_status": execution_status,
             "execution_trace": trace.model_dump(),
+            "trace_events": trace_events,
         },
     )
     db.add(result_record)
@@ -312,6 +367,11 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         overlay_url=overlay_url,
         execution_trace=trace,
         metadata=top_meta,
+        trace_events=trace_events,
+        compatibility=compatibility,
+        confidence_source=confidence_source,
+        warnings=warnings,
+        used_fallback=used_fallback,
     )
 
 
@@ -356,7 +416,7 @@ def get_query(query_id: uuid.UUID, request: Request, db: Session = Depends(get_d
 
     top_meta = {
         k: v for k, v in meta.items()
-        if k not in ("execution_trace", "overlay_path")
+        if k not in ("execution_trace", "overlay_path", "trace_events")
     }
 
     return QueryResponse(
@@ -369,4 +429,9 @@ def get_query(query_id: uuid.UUID, request: Request, db: Session = Depends(get_d
         overlay_url=overlay_url,
         execution_trace=trace,
         metadata=top_meta or None,
+        trace_events=query_record.trace_events,
+        compatibility=query_record.compatibility,
+        confidence_source=query_record.confidence_source,
+        warnings=query_record.warnings or [],
+        used_fallback=bool(query_record.used_fallback),
     )

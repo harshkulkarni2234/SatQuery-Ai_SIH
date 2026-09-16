@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.contracts import RasterMetadata
+from app.contracts import CompatibilityReport, RasterMetadata, TraceEvent
 
 
 # ── Image upload ──────────────────────────────────────────────────────
@@ -57,3 +57,8 @@ class QueryResponse(BaseModel):
     overlay_url: Optional[str] = None
     execution_trace: ExecutionTrace
     metadata: Optional[dict] = None
+    trace_events: Optional[list[TraceEvent]] = None
+    compatibility: Optional[CompatibilityReport] = None
+    confidence_source: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+    used_fallback: bool = False
