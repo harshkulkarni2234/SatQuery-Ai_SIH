@@ -53,6 +53,10 @@ Thumbs.db
 **/data/change_masks/
 outputs/
 
+# Raw downloaded/dumped material not meant for the repo (see data/manifest.json
+# "unused_raw_material" for what's in here and why it wasn't copied into data/demo/)
+/testing/
+
 # Model files
 *.bin
 *.safetensors

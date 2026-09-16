@@ -1,0 +1,57 @@
+{
+  "demo_scenarios": [
+    {
+      "id": "scenario_A_single",
+      "path": "data/demo/scenario_A_single/single_image.jpg",
+      "purpose": "single-image VQA/grounding demo (water, vegetation, built-up)",
+      "dataset": "unknown",
+      "license": "unconfirmed",
+      "citation": null,
+      "source_url": null,
+      "note": "Provenance could not be verified from the file alone; see README.md in this scenario's folder. An alternative, fully-cited image (farm2.jpg, Copernicus Sentinel-2 L2A, 2023-05-11, Belzyce, Poland) exists in the local testing/ folder if a verifiably-licensed image is required."
+    },
+    {
+      "id": "scenario_B_temporal",
+      "paths": [
+        "data/demo/scenario_B_temporal/before.tif",
+        "data/demo/scenario_B_temporal/after.tif"
+      ],
+      "purpose": "bi-temporal change-detection demo",
+      "dataset": "Sentinel-2 L2A (via AWS sentinel-cogs / Earth Search STAC)",
+      "license": "Copernicus Sentinel Data (free and open, Copernicus Data Legal Notice)",
+      "citation": "Contains modified Copernicus Sentinel data, processed by ESA / AWS Sentinel-2 Cloud-Optimized GeoTIFFs (sentinel-cogs)",
+      "source_url": "https://earth-search.aws.element84.com/v1",
+      "scenes": {
+        "before": {"id": "S2A_11SPV_20180824_1_L2A", "datetime": "2018-08-24T18:34:26.338000Z", "cloud_cover_pct": 1.9},
+        "after": {"id": "S2A_11SPV_20220823_0_L2A", "datetime": "2022-08-23T18:34:40.312000Z", "cloud_cover_pct": 0.04}
+      },
+      "aoi_wgs84": [-114.78, 36.00, -114.60, 36.15],
+      "crs": "EPSG:32611",
+      "resolution_m": 10.0,
+      "download_script": "ml/data/download_lakemead_temporal_pair.py",
+      "note": "Real dates and location; magnitude of visible change in this specific crop has not been independently verified (see README.md in this scenario's folder). Files carry no embedded acquisition-date tag (TCI visualization product) -- supply capture_date explicitly on upload."
+    },
+    {
+      "id": "scenario_C_optical_sar",
+      "paths": [
+        "data/demo/scenario_C_optical_sar/optical.png",
+        "data/demo/scenario_C_optical_sar/sar.png"
+      ],
+      "purpose": "optical+SAR cross-modal fusion demo",
+      "dataset": "BigEarthNet-MM (inferred from filename convention, not independently confirmed)",
+      "license": "CC-BY 4.0 (BigEarthNet-MM, if confirmed)",
+      "citation": "BigEarthNet-MM: A New Large Scale Multi-Modal Benchmark Archive (if confirmed) -- https://bigearth.net/",
+      "source_url": null,
+      "scenes": {
+        "optical": "S2B_MSIL2A_20170808T094029_N9999_R036_T35ULA_62_00",
+        "sar": "S1A_IW_GRDH_1SDV_20170808T043459_35ULA_62_00"
+      },
+      "acquisition_date": "2017-08-08",
+      "note": "Found pre-extracted in a local testing/ folder with no manifest or licence file; citation inferred from filenames only. is_georeferenced=false as delivered (plain PNG) -- see README.md in this scenario's folder for why SatQuery correctly reports coregistration as 'unverified' for these files despite genuine co-registration by construction."
+    }
+  ],
+  "unused_raw_material": {
+    "path": "testing/",
+    "description": "~4,000 additional Sentinel-2-only BigEarthNet-style patches (products T34UDG/2017-07-20 and T35ULA/2017-08-08), plus several single demo images (water2/3.jpg, farm1/3/4.jpg, built1.jpg, vqa1/3/4.jpg, cm1/2.png). Not used in data/demo/: the bulk patches are optical-only from different scenes (not a valid pair) and have no accompanying label file for BigEarthNet Q&A prep (Phase B2); farm1.jpg carries a DigitalGlobe watermark and was excluded per licensing risk; vqa1.jpg is an uncropped Google Earth Engine Code Editor screenshot. The rest have no confirmable source and were left in place rather than copied into data/demo/ to avoid scope creep beyond the 3 scenarios this phase needs."
+  }
+}
