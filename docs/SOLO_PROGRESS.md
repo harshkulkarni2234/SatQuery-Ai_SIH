@@ -12,13 +12,13 @@ Legend: `done` / `in_progress` / `blocked` / `todo`
 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
-| A0 — Baseline freeze + shared contracts | done | (pending commit) | Tag `baseline-round2` on `f1f7513`. `AGENTS.md`, `docs/CONTRACTS.md`, `docs/BASELINE.md`, `backend/app/contracts.py`, `backend/tests/test_contracts.py` added. 111 backend tests pass, frontend builds clean. Had to rebuild `backend/venv_mac/` (mac venv; committed `venv/` is Windows) and reinstall `frontend/node_modules` (missing `@rollup/rollup-darwin-arm64` optional dep) — see docs/BASELINE.md. |
+| A0 — Baseline freeze + shared contracts | done | `5b5bf3a` | Tag `baseline-round2` on `f1f7513`. `AGENTS.md`, `docs/CONTRACTS.md`, `docs/BASELINE.md`, `backend/app/contracts.py`, `backend/tests/test_contracts.py` added. 111 backend tests pass, frontend builds clean. Had to rebuild `backend/venv_mac/` (mac venv; committed `venv/` is Windows) and reinstall `frontend/node_modules` (missing `@rollup/rollup-darwin-arm64` optional dep) — see docs/BASELINE.md. |
 
 ## Wave 1
 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
-| A1 — Real GeoTIFF/TIFF raster ingestion | todo | | |
+| A1 — Real GeoTIFF/TIFF raster ingestion | done | (pending) | `backend/app/services/raster_ingest.py`: `extract_metadata()` (GeoTIFF via rasterio incl. bounds_wgs84 reprojection, TIFF-tag acquisition date with user-date override, PNG/JPG/BMP via Pillow, JP2 attempted via rasterio with graceful degradation, MAX_RASTER_PIXELS guard, magic-byte validation via actual rasterio/Pillow open not just extension) and `load_rgb_preview()` (percentile stretch for 16-bit, band 4/3/2 selection for band_count>=4, downsampling). 14 new tests, all synthetic (rasterio in-memory-style tmp files) + verified manually against a realistic synthetic 4-band uint16 GeoTIFF. rasterio added to requirements.txt (backend stays torch-free). DB untouched (that's A2). |
 | A2 — Persist metadata + expose in API (GATE G1) | todo | | |
 | B1 — Genuine demo & evaluation data | todo | | |
 | B2 — Reproducible BigEarthNet LoRA adaptation | todo | | |
