@@ -58,7 +58,7 @@ export default function VQAResult({ result, images }) {
         Answer generated from the analyzed satellite frame.
       </p>
       <div className="result-meta">
-        <ConfidenceMeta value={confidence} />
+        <ConfidenceMeta value={confidence} source={result.confidence_source} />
         {model && (
           <div className="meta-item">
             <span className="meta-key">Model</span>

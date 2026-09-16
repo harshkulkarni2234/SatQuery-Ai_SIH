@@ -43,6 +43,24 @@ async function runQuery(queryText, imageIds) {
   return data; // QueryResponse
 }
 
+async function getSpecialists() {
+  const res = await fetch("/specialists");
+  const data = await res.json().catch(() => []);
+  if (!res.ok) {
+    throw new ApiError(extractMessage(data, res), res.status, data.detail);
+  }
+  return data; // SpecialistSpec[]
+}
+
+// Report PDF/JSON are plain GETs the browser can download directly — no
+// fetch wrapper needed, just the URL (used as an <a href>).
+function reportPdfUrl(queryId) {
+  return `/query/${queryId}/report.pdf`;
+}
+function reportJsonUrl(queryId) {
+  return `/query/${queryId}/report.json`;
+}
+
 // The backend's error `detail` is either a plain string, a FastAPI/pydantic
 // validation array, or a structured {message, suggestion, compatibility?}
 // object (services/planner.py + services/compatibility.py). extractMessage
@@ -69,4 +87,4 @@ class ApiError extends Error {
   }
 }
 
-export { uploadImage, getImage, runQuery, ApiError };
+export { uploadImage, getImage, runQuery, getSpecialists, reportPdfUrl, reportJsonUrl, ApiError };

@@ -57,7 +57,7 @@ export default function GroundingResult({ result, images }) {
         </>
       )}
       <div className="result-meta">
-        <ConfidenceMeta value={confidence} />
+        <ConfidenceMeta value={confidence} source={result.confidence_source} />
       </div>
     </div>
   );

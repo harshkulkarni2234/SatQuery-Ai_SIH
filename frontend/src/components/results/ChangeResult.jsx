@@ -28,7 +28,7 @@ export default function ChangeResult({ result, images }) {
           the same geographic area. Upload a co-registered before/after pair.
         </div>
         <div className="result-meta">
-          <ConfidenceMeta value={confidence} />
+          <ConfidenceMeta value={confidence} source={result.confidence_source} />
         </div>
       </div>
     );
@@ -154,7 +154,7 @@ export default function ChangeResult({ result, images }) {
       </div>
 
       <div className="result-meta">
-        <ConfidenceMeta value={confidence} />
+        <ConfidenceMeta value={confidence} source={result.confidence_source} />
       </div>
     </div>
   );

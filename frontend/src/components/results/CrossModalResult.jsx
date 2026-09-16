@@ -153,7 +153,7 @@ export default function CrossModalResult({ result, images }) {
           : " Spatial correspondence between the two sensors could not be verified."}
       </p>
       <div className="result-meta">
-        <ConfidenceMeta value={confidence} />
+        <ConfidenceMeta value={confidence} source={result.confidence_source} />
       </div>
     </div>
   );

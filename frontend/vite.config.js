@@ -12,6 +12,7 @@ export default defineConfig({
       "/images": { target },
       "/query": { target },
       "/masks": { target },
+      "/specialists": { target },
     },
   },
 });

@@ -1,14 +1,12 @@
 export const fmtConfidence = (v) => (v === null || v === undefined ? null : v.toFixed(3));
 
-// Deterministic, stable report identifier rendered from the analysis output.
+// Matches backend/app/services/report.py's report_id exactly (both derive
+// from the real query_id) so the ID shown here is the same one that
+// appears on the downloadable PDF/JSON report — not a client-side guess.
 export function reportId(result) {
-  const seed = `${result?.task_classified || ""}|${result?.answer_text || ""}`;
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return `SQ-2026-${String((Math.abs(h) % 9000) + 1000)}`;
+  const queryId = result?.query_id;
+  if (!queryId) return "Not yet generated";
+  return `SQ-${queryId.slice(0, 8).toUpperCase()}`;
 }
 
 // "QUERY_RECEIVED" -> "Query received"
