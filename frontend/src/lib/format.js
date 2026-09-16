@@ -11,6 +11,19 @@ export function reportId(result) {
   return `SQ-2026-${String((Math.abs(h) % 9000) + 1000)}`;
 }
 
+// "QUERY_RECEIVED" -> "Query received"
+export function fmtStepLabel(step) {
+  if (!step) return "";
+  const words = step.toLowerCase().split("_");
+  return words[0].charAt(0).toUpperCase() + words[0].slice(1) + (words.length > 1 ? " " + words.slice(1).join(" ") : "");
+}
+
+export function fmtSpecialistId(id) {
+  if (!id) return "";
+  const [, ...rest] = id.split(".");
+  return (rest.join(".") || id).replace(/_/g, " ");
+}
+
 const NOT_AVAILABLE = "Not available";
 
 export function fmtDimensions(meta) {

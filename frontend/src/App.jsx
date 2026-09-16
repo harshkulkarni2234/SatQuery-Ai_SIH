@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { uploadImage, runQuery, ApiError } from "./api.js";
 import { IconSatellite } from "./components/icons/index.jsx";
-import { ORBIT_SEQUENCE, ORBIT_POS, STEP_LABELS, SPECIALIST_DWELL_MS } from "./constants/specialists.js";
 import InputWorkspace, { MAX_IMAGES } from "./components/input/InputWorkspace.jsx";
 import AgentSelection from "./components/agent/AgentSelection.jsx";
+import TraceReplay from "./components/agent/TraceReplay.jsx";
 import AnalysisReady from "./components/agent/AnalysisReady.jsx";
 import AnalysisResult from "./components/results/AnalysisResult.jsx";
 
@@ -12,12 +12,8 @@ export default function App() {
   const [queryText, setQueryText] = useState("");
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
-  const [view, setView] = useState("input"); // input | analyzing | ready | result
-
-  const [orbitStep, setOrbitStep] = useState(0);
-  const [phase, setPhase] = useState("traversing");
+  const [view, setView] = useState("input"); // input | waiting | trace | ready | result
   const [selectedTask, setSelectedTask] = useState(null);
-  const [animLabel, setAnimLabel] = useState(STEP_LABELS[0]);
 
   // Images upload to the backend as soon as they're added (not deferred to
   // Analyze) so real metadata (CRS, bounds, resolution, bands — Phase A2)
@@ -112,78 +108,20 @@ export default function App() {
       setError("One or more images failed to upload. Remove or retry them before analyzing.");
       return;
     }
-    setView("analyzing");
-    setPhase("traversing");
+    setView("waiting");
     setSelectedTask(null);
     setResult(null);
 
-    const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-
-    // Images are already uploaded (uploadItem runs as soon as they're added —
-    // see addFiles/updateImage) so only the query itself runs here. The UI
-    // traversal below advances on a FIXED 1s-per-specialist clock (4 × 1s =
-    // 4s total) and is completely independent of query/inference latency.
-    // Step boundaries are anchored to an absolute start instant so the
-    // sequence cannot drift even when the event loop is busy.
-    const finish = runQuery(queryText.trim(), images.map((it) => it.imageId));
-
+    // No fixed-clock animation here — the "waiting" screen (AgentSelection)
+    // stays neutral for however long the real request actually takes, and
+    // once it responds we replay the backend's OWN recorded trace_events
+    // (TraceReplay) rather than a client-side guess at what happened.
     try {
-      const data = await new Promise((resolve, reject) => {
-        let settled = false;
-        let earlyData = null;
-        const cancel = () => { settled = true; };
-
-        finish.then(
-          (d) => { earlyData = d; },
-          (err) => {
-            if (!settled) { settled = true; reject(err); }
-          }
-        );
-
-        (async () => {
-          const stepTimes = Array.from(
-            { length: ORBIT_SEQUENCE.length },
-            (_, k) => performance.now() + (k + 1) * SPECIALIST_DWELL_MS
-          );
-          setOrbitStep(0);
-          setAnimLabel(STEP_LABELS[0]);
-          for (let k = 0; k < stepTimes.length; k++) {
-            await delay(Math.max(0, stepTimes[k] - performance.now()));
-            if (settled) return; // error path — stop advancing
-            const next = k + 1;
-            if (next < stepTimes.length) {
-              setOrbitStep(next);
-              setAnimLabel(STEP_LABELS[next]);
-            }
-          }
-          if (settled) return;
-          cancel();
-          try {
-            const d = earlyData !== null ? earlyData : await finish;
-            resolve(d);
-          } catch (err) {
-            reject(err);
-          }
-        })();
-      });
-
-      const task = data.task_classified;
-      // Phased winner reveal, driven by the REAL backend selection:
-      //   A) lock-on (~520ms)  B+C) fade + centre move (~900ms)
-      //   D) preparing report (~900ms) then hand off to the ready screen.
-      setPhase("selected");
-      setSelectedTask(task);
-      setOrbitStep(ORBIT_POS[task] ?? 0);
-      setAnimLabel("Specialist selected ✓");
+      const data = await runQuery(queryText.trim(), images.map((it) => it.imageId));
+      setSelectedTask(data.task_classified);
       setResult(data);
-      await delay(520);
-      setPhase("winner");
-      await delay(900);
-      setPhase("preparing");
-      await delay(900);
-      setView("ready");
+      setView("trace");
     } catch (err) {
-      setPhase("traversing");
       setSelectedTask(null);
       setView("input");
       setError(
@@ -220,14 +158,9 @@ export default function App() {
             error={error}
           />
         )}
-        {view === "analyzing" && (
-          <AgentSelection
-            key="analyzing"
-            orbitStep={orbitStep}
-            phase={phase}
-            selectedId={selectedTask}
-            animLabel={animLabel}
-          />
+        {view === "waiting" && <AgentSelection key="waiting" />}
+        {view === "trace" && (
+          <TraceReplay key="trace" result={result} onDone={() => setView("ready")} />
         )}
         {view === "ready" && (
           <AnalysisReady
@@ -244,7 +177,6 @@ export default function App() {
             onBack={() => {
               setView("input");
               setResult(null);
-              setPhase("traversing");
               setSelectedTask(null);
               setError(null);
             }}
