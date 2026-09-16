@@ -246,7 +246,7 @@ def load_rgb_preview(path: str, max_side: int = 2048) -> np.ndarray:
             arr = np.array(img)
 
     if arr.dtype != np.uint8:
-        arr = _percentile_stretch_to_uint8(arr)
+        arr = percentile_stretch_to_uint8(arr)
 
     if arr.ndim == 3 and arr.shape[-1] == 1:
         arr = arr[..., 0]
@@ -254,7 +254,7 @@ def load_rgb_preview(path: str, max_side: int = 2048) -> np.ndarray:
     return arr
 
 
-def _percentile_stretch_to_uint8(arr: np.ndarray, low: float = 2.0, high: float = 98.0) -> np.ndarray:
+def percentile_stretch_to_uint8(arr: np.ndarray, low: float = 2.0, high: float = 98.0) -> np.ndarray:
     arr = arr.astype(np.float64)
     out = np.zeros_like(arr, dtype=np.uint8)
     channels = arr.shape[-1] if arr.ndim == 3 else 1

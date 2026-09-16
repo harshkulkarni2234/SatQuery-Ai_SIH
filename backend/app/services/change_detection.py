@@ -5,8 +5,12 @@ Pipeline:
   1. Input validation — readability, aspect-ratio compatibility, and any
      spatial metadata (tile id / CRS+bounds) that would prove the two images
      do NOT cover the same geographic area.
-  2. Optional translation registration — phase correlation to remove small
-     spatial offsets before differencing (no learned model).
+  2. Alignment — when both images are georeferenced (Phase B7), reproject
+     the AFTER raster onto the BEFORE raster's exact CRS/transform/grid via
+     rasterio.warp.reproject (real geographic alignment, not a pixel guess).
+     Otherwise, fall back to translation registration via phase correlation.
+     Either way, `alignment_method` in the result says honestly which one
+     ran (or "none").
   3. Robust difference — median-smoothed grayscale difference plus the
      max-channel colour difference, magnitude-gated threshold.
   4. Morphological cleaning — opening (speckle removal) then closing
@@ -15,8 +19,9 @@ Pipeline:
      boxes, and a TOP-N cap so the report shows a few meaningful regions.
   6. Outputs — binary mask, a colour change-overlay on the AFTER image,
      pixel coordinates scaled back to the *original* AFTER resolution so
-     frontend overlays always line up, and statistics measured from the
-     *cleaned* mask.
+     frontend overlays always line up, statistics measured from the
+     *cleaned* mask, and a real changed-area-in-m² figure when both images
+     carry a real resolution (never estimated when resolution is unknown).
 
 The service NEVER interprets semantic change (e.g. "building constructed").
 It reports pixel-level visual differences only.
@@ -27,6 +32,10 @@ import uuid
 
 import cv2
 import numpy as np
+import rasterio
+from rasterio.warp import reproject, Resampling
+
+from app.services.raster_ingest import load_rgb_preview, percentile_stretch_to_uint8
 
 MASK_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "change_masks")
 
@@ -59,18 +68,62 @@ def _ensure_mask_dir():
     os.makedirs(MASK_DIR, exist_ok=True)
 
 
-def _load_grayscale(path: str) -> np.ndarray:
-    img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        raise FileNotFoundError(f"Cannot read image: {path}")
-    return img
-
-
 def _load_bgr(path: str) -> np.ndarray:
-    img = cv2.imread(path, cv2.IMREAD_COLOR)
-    if img is None:
-        raise FileNotFoundError(f"Cannot read image: {path}")
-    return img
+    """Real GeoTIFF/16-bit-aware loader (Phase B7) — replaces cv2.imread,
+    which silently mishandles multi-band/16-bit Sentinel-style rasters.
+    Returns a BGR uint8 array (band order reversed from load_rgb_preview's
+    RGB so the rest of this module's cv2-based pipeline sees what it always
+    expected from cv2.imread)."""
+    rgb = load_rgb_preview(path)
+    if rgb.ndim == 2:
+        return cv2.cvtColor(rgb, cv2.COLOR_GRAY2BGR)
+    return rgb[..., ::-1]
+
+
+def _load_grayscale(path: str) -> np.ndarray:
+    bgr = _load_bgr(path)
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+
+
+def _geographic_align(path_before: str, path_after: str) -> tuple[np.ndarray, np.ndarray]:
+    """Reproject the AFTER raster onto the BEFORE raster's exact grid
+    (same CRS, transform, shape) using rasterio.warp.reproject — real
+    geographic alignment, not a pixel-offset guess. Returns (before_bgr,
+    after_bgr) uint8 arrays, pixel-for-pixel aligned. Raises on any failure
+    (caller falls back to phase-correlation registration)."""
+    with rasterio.open(path_before) as src_before, rasterio.open(path_after) as src_after:
+        if not src_before.crs or not src_after.crs:
+            raise ValueError("Both rasters must have a CRS for geographic alignment")
+        band_count = min(src_before.count, src_after.count, 3)
+        band_indices = list(range(1, band_count + 1))
+
+        before_data = src_before.read(band_indices)
+        after_aligned = np.zeros(
+            (band_count, src_before.height, src_before.width), dtype=src_after.dtypes[0]
+        )
+        reproject(
+            source=src_after.read(band_indices),
+            destination=after_aligned,
+            src_transform=src_after.transform,
+            src_crs=src_after.crs,
+            dst_transform=src_before.transform,
+            dst_crs=src_before.crs,
+            resampling=Resampling.bilinear,
+        )
+
+    before_rgb = np.moveaxis(before_data, 0, -1)
+    after_rgb = np.moveaxis(after_aligned, 0, -1)
+    if before_rgb.dtype != np.uint8:
+        before_rgb = percentile_stretch_to_uint8(before_rgb)
+    if after_rgb.dtype != np.uint8:
+        after_rgb = percentile_stretch_to_uint8(after_rgb)
+    if band_count == 1:
+        before_bgr = cv2.cvtColor(before_rgb[..., 0], cv2.COLOR_GRAY2BGR)
+        after_bgr = cv2.cvtColor(after_rgb[..., 0], cv2.COLOR_GRAY2BGR)
+    else:
+        before_bgr = before_rgb[..., ::-1]
+        after_bgr = after_rgb[..., ::-1]
+    return before_bgr, after_bgr
 
 
 def _resize_to_match(img: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray:
@@ -222,6 +275,16 @@ def _merge_regions(boxes: list[list[int]], frame_px: int) -> list[list[int]]:
     return merged[:_MAX_REGIONS]
 
 
+def _quadrant(cx: float, cy: float, w: int, h: int) -> str:
+    mid_x, mid_y = w / 2, h / 2
+    band = 0.15  # fraction of frame around center treated as "center"
+    if abs(cx - mid_x) < w * band and abs(cy - mid_y) < h * band:
+        return "center"
+    vertical = "upper" if cy < mid_y else "lower"
+    horizontal = "left" if cx < mid_x else "right"
+    return f"{vertical}-{horizontal}"
+
+
 def _region_metrics(box, clean_mask):
     x1, y1, x2, y2 = box
     roi = clean_mask[y1:y2, x1:x2]
@@ -298,8 +361,10 @@ def detect_change(
             "reason": reason,
             "error": True,
             "registration_applied": False,
+            "alignment_method": "none",
             "change_mask_path": None,
             "overlay_path": None,
+            "changed_area_m2": None,
             "change_percentage": None,
             "answer_text": reason,
             "bounding_boxes": None,
@@ -309,20 +374,47 @@ def detect_change(
             "total_pixels": None,
         }
 
-    # ── STEP 2 — ALIGNMENT / REGISTRATION ─────────────────────────────
-    after_gray_resized = _resize_to_match(after_gray, before_gray.shape[:2])
-    after_bgr_resized = _resize_to_match(after_bgr, before_bgr.shape[:2])
-    aligned_gray, registration_applied, shift = register_after(after_gray_resized, before_gray)
-    if registration_applied:
-        transform = np.float32([[1, 0, shift[0]], [0, 1, shift[1]]])
-        aligned_bgr = cv2.warpAffine(
-            after_bgr_resized, transform, (w_b, h_b), borderMode=cv2.BORDER_REPLICATE
-        )
-    else:
-        aligned_bgr = after_bgr_resized
+    # ── STEP 2 — ALIGNMENT ─────────────────────────────────────────────
+    # Real geographic-grid reprojection when both images are georeferenced
+    # (Phase B7); phase-correlation translation registration otherwise.
+    # alignment_method always says honestly which one (if either) ran.
+    alignment_method = "none"
+    registration_applied = False
+    both_georeferenced = bool((metadata_before or {}).get("is_georeferenced")) and bool(
+        (metadata_after or {}).get("is_georeferenced")
+    )
+    if both_georeferenced:
+        try:
+            before_bgr, aligned_bgr = _geographic_align(image_path_before, image_path_after)
+            before_gray = cv2.cvtColor(before_bgr, cv2.COLOR_BGR2GRAY)
+            aligned_gray = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2GRAY)
+            alignment_method = "geographic_reprojection"
+        except Exception:
+            both_georeferenced = False  # fall through to the pixel-based path below
+
+    if not both_georeferenced:
+        after_gray_resized = _resize_to_match(after_gray, before_gray.shape[:2])
+        after_bgr_resized = _resize_to_match(after_bgr, before_bgr.shape[:2])
+        aligned_gray, registration_applied, shift = register_after(after_gray_resized, before_gray)
+        if registration_applied:
+            transform = np.float32([[1, 0, shift[0]], [0, 1, shift[1]]])
+            aligned_bgr = cv2.warpAffine(
+                after_bgr_resized, transform, (w_b, h_b), borderMode=cv2.BORDER_REPLICATE
+            )
+        else:
+            aligned_bgr = after_bgr_resized
+        alignment_method = "phase_correlation" if registration_applied else "none"
 
     h, w = aligned_gray.shape
     total_pixels = h * w
+
+    # Real changed-area-in-m² — only when both images carry a real,
+    # matching-enough resolution; never estimated otherwise.
+    res_before = (metadata_before or {}).get("resolution")
+    res_after = (metadata_after or {}).get("resolution")
+    pixel_area_m2 = None
+    if res_before and res_after:
+        pixel_area_m2 = float(res_before[0]) * float(res_before[1])
 
     # ── STEP 3+4 — ROBUST DIFFERENCE + MORPHOLOGICAL CLEANING ─────────
     cleaned = _robust_diff_mask(before_gray, aligned_gray, before_bgr, aligned_bgr)
@@ -367,8 +459,10 @@ def detect_change(
             "reason": INCOMPATIBLE_MSG,
             "error": True,
             "registration_applied": registration_applied,
+            "alignment_method": alignment_method,
             "change_mask_path": None,
             "overlay_path": None,
+            "changed_area_m2": None,
             "change_percentage": None,
             "answer_text": INCOMPATIBLE_MSG,
             "bounding_boxes": None,
@@ -425,6 +519,10 @@ def detect_change(
         scaled_regions = []
 
     # ── STEPS 7+8 — HONEST SUMMARY + STATISTICS FROM THE CLEANED MASK ──
+    changed_area_m2 = (
+        round(changed_pixels * pixel_area_m2, 1) if pixel_area_m2 is not None else None
+    )
+
     if not scaled_boxes:
         answer_text = (
             "Pixel-level visual differences were not detected above the "
@@ -432,29 +530,41 @@ def detect_change(
         )
     else:
         area_word = "region" if len(scaled_boxes) == 1 else "regions"
+        location_note = ""
+        if scaled_regions:
+            cx, cy = scaled_regions[0]["centroid"]
+            location_note = f" The largest change is located in the {_quadrant(cx, cy, w_a, h_a)} of the frame."
+        area_note = (
+            f" This corresponds to approximately {changed_area_m2:,.0f} m²."
+            if changed_area_m2 is not None
+            else ""
+        )
         answer_text = (
             f"Pixel-level visual differences were detected in {len(scaled_boxes)} "
             f"highlighted {area_word}, covering approximately "
-            f"{change_percentage:.1f}% of the frame. Differences are measured at "
-            "the pixel level; semantic change classification was not performed."
+            f"{change_percentage:.1f}% of the frame.{area_note}{location_note} "
+            "Differences are measured at the pixel level; semantic change "
+            "classification was not performed."
         )
 
-    registration_note = (
-        "Images were translation-aligned before differencing. "
-        if registration_applied
-        else ""
-    )
+    alignment_note = {
+        "geographic_reprojection": "The AFTER image was reprojected onto the BEFORE image's geographic grid before differencing. ",
+        "phase_correlation": "Images were translation-aligned before differencing. ",
+        "none": "",
+    }[alignment_method]
     if scaled_boxes:
-        answer_text = registration_note + answer_text
+        answer_text = alignment_note + answer_text
 
     result = {
         "validation_failed": False,
         "reason": None,
         "error": False,
         "registration_applied": registration_applied,
+        "alignment_method": alignment_method,
         "change_mask_path": mask_path,
         "overlay_path": overlay_path,
         "change_percentage": round(change_percentage, 2),
+        "changed_area_m2": changed_area_m2,
         "answer_text": answer_text,
         "bounding_boxes": scaled_boxes,
         "regions": scaled_regions,

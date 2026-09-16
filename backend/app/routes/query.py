@@ -138,22 +138,13 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception(
                     "One or more image files for change detection are missing on disk."
                 )
-            meta_before = {
-                "crs": img_before.crs,
-                "bbox_coords": img_before.bbox_coords,
-                "capture_date": str(img_before.capture_date)
-                if img_before.capture_date
-                else None,
-                "modality": img_before.modality,
-            }
-            meta_after = {
-                "crs": img_after.crs,
-                "bbox_coords": img_after.bbox_coords,
-                "capture_date": str(img_after.capture_date)
-                if img_after.capture_date
-                else None,
-                "modality": img_after.modality,
-            }
+            # _compat_dict already carries is_georeferenced/resolution/transform
+            # (needed for B7's geographic-alignment + real area-in-m² paths);
+            # bbox_coords is added on top since _spatial_conflict() (this
+            # module's own pre-existing check, unrelated to services/
+            # compatibility.py) still keys off that specific field name.
+            meta_before = {**_compat_dict(img_before), "bbox_coords": img_before.bbox_coords}
+            meta_after = {**_compat_dict(img_after), "bbox_coords": img_after.bbox_coords}
             specialist_result = selected_entry.handler(
                 img_before.file_path,
                 img_after.file_path,
@@ -179,9 +170,11 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 "num_regions": stats.get("num_regions"),
                 "changed_pixels": stats.get("changed_pixels"),
                 "total_pixels": stats.get("total_pixels"),
+                "changed_area_m2": stats.get("changed_area_m2"),
                 "regions": stats.get("regions"),
                 "validation_failed": bool(specialist_result.warnings),
                 "registration_applied": stats.get("registration_applied"),
+                "alignment_method": stats.get("alignment_method"),
                 "reason": specialist_result.warnings[0] if specialist_result.warnings else None,
                 "specialist": "change_detection",
             }
