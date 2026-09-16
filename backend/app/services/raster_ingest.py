@@ -9,6 +9,7 @@ None with an explicit warning, per AGENTS.md rule 2.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from datetime import date, datetime
@@ -136,7 +137,13 @@ def _extract_geospatial_metadata(
                 "JPEG2000 file could not be read by the local GDAL build "
                 "(JP2 driver may be unavailable). Try a GeoTIFF instead."
             ) from exc
-        raise RasterIngestError(f"File could not be read as a raster: {exc}") from exc
+        # GDAL's own error text embeds the server-side file path; keep that
+        # out of the client-facing message and log it server-side instead.
+        logging.getLogger(__name__).warning("Raster read failed for %s: %s", path, exc)
+        raise RasterIngestError(
+            f"File could not be read as a valid {ext.lstrip('.').upper()} raster. "
+            "It may be corrupt or in an unsupported format."
+        ) from exc
 
 
 def _extract_plain_image_metadata(path: str, ext: str, user_capture_date: Optional[date]) -> RasterMetadata:
@@ -149,7 +156,11 @@ def _extract_plain_image_metadata(path: str, ext: str, user_capture_date: Option
             band_count = len(mode) if mode not in ("P",) else 1
             dtype = "uint8"
     except (UnidentifiedImageError, OSError) as exc:
-        raise RasterIngestError(f"File could not be read as an image: {exc}") from exc
+        logging.getLogger(__name__).warning("Image read failed for %s: %s", path, exc)
+        raise RasterIngestError(
+            f"File could not be read as a valid {ext.lstrip('.').upper()} image. "
+            "It may be corrupt or in an unsupported format."
+        ) from exc
 
     warnings: list[str] = ["Image format has no georeferencing; spatial checks are skipped"]
     if user_capture_date is not None:

@@ -11,6 +11,70 @@ export function reportId(result) {
   return `SQ-2026-${String((Math.abs(h) % 9000) + 1000)}`;
 }
 
+const NOT_AVAILABLE = "Not available";
+
+export function fmtDimensions(meta) {
+  if (!meta || meta.width == null || meta.height == null) return NOT_AVAILABLE;
+  return `${meta.width} × ${meta.height} px`;
+}
+
+export function fmtBands(meta) {
+  if (!meta || meta.band_count == null) return NOT_AVAILABLE;
+  return `${meta.band_count}${meta.dtype ? ` (${meta.dtype})` : ""}`;
+}
+
+export function fmtCrs(meta) {
+  return meta?.crs || NOT_AVAILABLE;
+}
+
+export function fmtResolution(meta) {
+  if (!meta || !meta.resolution) return NOT_AVAILABLE;
+  const [x, y] = meta.resolution;
+  return x === y ? `${x} m` : `${x} × ${y} m`;
+}
+
+export function fmtExtent(meta) {
+  if (!meta || !meta.bounds_wgs84) return NOT_AVAILABLE;
+  const [minx, miny, maxx, maxy] = meta.bounds_wgs84;
+  return `${minx.toFixed(3)}, ${miny.toFixed(3)} – ${maxx.toFixed(3)}, ${maxy.toFixed(3)}`;
+}
+
+export function fmtAcquisitionDate(meta) {
+  if (!meta || !meta.acquisition_date) return NOT_AVAILABLE;
+  const sourceLabel =
+    { user: "user-entered", file_metadata: "from file", unknown: "unknown source" }[
+      meta.acquisition_date_source
+    ] || meta.acquisition_date_source;
+  return `${meta.acquisition_date} (${sourceLabel})`;
+}
+
+export function fmtGeoreferenced(meta) {
+  if (!meta) return NOT_AVAILABLE;
+  return meta.is_georeferenced ? "Yes" : "No";
+}
+
+export function fmtFormat(meta) {
+  return meta?.format || NOT_AVAILABLE;
+}
+
+export function pairSummary(images) {
+  if (images.length !== 2) return null;
+  const [a, b] = images;
+  const metaA = a.metadata;
+  const metaB = b.metadata;
+  const sameModality = a.modality === b.modality;
+  const datesKnown = !!metaA?.acquisition_date && !!metaB?.acquisition_date;
+  const datesDiffer = datesKnown ? metaA.acquisition_date !== metaB.acquisition_date : null;
+  const bothGeoreferenced = !!metaA?.is_georeferenced && !!metaB?.is_georeferenced;
+
+  return {
+    sameModality,
+    datesKnown,
+    datesDiffer,
+    bothGeoreferenced,
+  };
+}
+
 export function describeTarget(images) {
   if (!images.length) return "";
   const optical = images.filter((i) => i.modality === "OPTICAL").length;

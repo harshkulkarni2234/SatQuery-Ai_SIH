@@ -19,6 +19,42 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [animLabel, setAnimLabel] = useState(STEP_LABELS[0]);
 
+  // Images upload to the backend as soon as they're added (not deferred to
+  // Analyze) so real metadata (CRS, bounds, resolution, bands — Phase A2)
+  // can be shown on the card right away. Re-uploads on modality/date change
+  // create a new backend Image row rather than mutating the old one — there
+  // is no update/delete endpoint yet, so the previous row is simply orphaned.
+  async function uploadItem(key, file, modality, captureDate) {
+    setImages((prev) =>
+      prev.map((it) => (it.key === key ? { ...it, uploading: true, uploadError: null } : it))
+    );
+    try {
+      const up = await uploadImage(file, modality, captureDate);
+      setImages((prev) =>
+        prev.map((it) =>
+          it.key === key
+            ? { ...it, uploading: false, imageId: up.image_id, metadata: up.metadata || null }
+            : it
+        )
+      );
+    } catch (err) {
+      setImages((prev) =>
+        prev.map((it) =>
+          it.key === key
+            ? {
+                ...it,
+                uploading: false,
+                imageId: null,
+                metadata: null,
+                uploadError:
+                  err instanceof ApiError ? err.message : `Upload failed: ${err.message}`,
+              }
+            : it
+        )
+      );
+    }
+  }
+
   function addFiles(fileList) {
     setError(null);
     const files = fileList.filter((f) => f && f.size > 0);
@@ -28,15 +64,30 @@ export default function App() {
       file,
       url: URL.createObjectURL(file),
       modality: "OPTICAL",
+      captureDate: null,
       imageId: null,
+      uploading: false,
+      uploadError: null,
+      metadata: null,
     }));
     setImages((prev) => [...prev, ...newItems].slice(0, MAX_IMAGES));
+    for (const item of newItems) {
+      uploadItem(item.key, item.file, item.modality, item.captureDate);
+    }
   }
 
   function updateImage(index, patch) {
+    let updated = null;
     setImages((prev) =>
-      prev.map((it, i) => (i === index ? { ...it, ...patch } : it))
+      prev.map((it, i) => {
+        if (i !== index) return it;
+        updated = { ...it, ...patch };
+        return updated;
+      })
     );
+    if (updated && ("modality" in patch || "captureDate" in patch)) {
+      uploadItem(updated.key, updated.file, updated.modality, updated.captureDate);
+    }
   }
 
   function removeImage(key) {
@@ -53,6 +104,14 @@ export default function App() {
       setError("Please upload at least one image.");
       return;
     }
+    if (images.some((it) => it.uploading)) {
+      setError("Please wait for all images to finish uploading.");
+      return;
+    }
+    if (images.some((it) => !it.imageId)) {
+      setError("One or more images failed to upload. Remove or retry them before analyzing.");
+      return;
+    }
     setView("analyzing");
     setPhase("traversing");
     setSelectedTask(null);
@@ -60,22 +119,13 @@ export default function App() {
 
     const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    // Backend work is requested immediately but runs in the background. The
-    // UI traversal below advances on a FIXED 1s-per-specialist clock (4 × 1s
-    // = 4s total) and is completely independent of upload / VQA inference
-    // latency. Step boundaries are anchored to an absolute start instant so
-    // the sequence cannot drift even when the event loop is busy.
-    const finish = (async () => {
-      const withIds = [...images];
-      for (let i = 0; i < withIds.length; i++) {
-        if (!withIds[i].imageId) {
-          const up = await uploadImage(withIds[i].file, withIds[i].modality);
-          withIds[i] = { ...withIds[i], imageId: up.image_id };
-        }
-      }
-      setImages(withIds);
-      return runQuery(queryText.trim(), withIds.map((it) => it.imageId));
-    })();
+    // Images are already uploaded (uploadItem runs as soon as they're added —
+    // see addFiles/updateImage) so only the query itself runs here. The UI
+    // traversal below advances on a FIXED 1s-per-specialist clock (4 × 1s =
+    // 4s total) and is completely independent of query/inference latency.
+    // Step boundaries are anchored to an absolute start instant so the
+    // sequence cannot drift even when the event loop is busy.
+    const finish = runQuery(queryText.trim(), images.map((it) => it.imageId));
 
     try {
       const data = await new Promise((resolve, reject) => {

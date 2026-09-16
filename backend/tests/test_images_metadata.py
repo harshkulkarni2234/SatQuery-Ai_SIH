@@ -101,3 +101,16 @@ def test_get_image_detail():
 def test_get_unknown_image_returns_404():
     resp = client.get(f"/images/{uuid.uuid4()}")
     assert resp.status_code == 404
+
+
+def test_user_capture_date_overrides_file_metadata():
+    buf = _geotiff_bytes()
+    resp = client.post(
+        "/images/upload",
+        files={"file": ("dated.tif", buf, "image/tiff")},
+        data={"modality": "OPTICAL", "capture_date": "2025-01-15"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["metadata"]["acquisition_date"] == "2025-01-15"
+    assert body["metadata"]["acquisition_date_source"] == "user"

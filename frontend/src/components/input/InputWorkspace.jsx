@@ -1,9 +1,35 @@
 import { useRef } from "react";
 import { IconUpload, IconPlay, IconPlus } from "../icons/index.jsx";
 import { SCENARIOS } from "../../constants/scenarios.js";
+import { pairSummary } from "../../lib/format.js";
 import ImageCard from "./ImageCard.jsx";
 
 const MAX_IMAGES = 2;
+
+function PairSummary({ images }) {
+  const summary = pairSummary(images);
+  if (!summary) return null;
+  const { sameModality, datesKnown, datesDiffer, bothGeoreferenced } = summary;
+  return (
+    <div className="pair-summary">
+      <span className="pair-summary-label">Pair summary</span>
+      <span className="pair-summary-item">
+        Same modality: <strong>{sameModality ? "Yes" : "No"}</strong>
+      </span>
+      <span className="pair-summary-item">
+        Dates differ:{" "}
+        <strong>{!datesKnown ? "Unknown" : datesDiffer ? "Yes" : "No"}</strong>
+      </span>
+      <span className="pair-summary-item">
+        Both georeferenced: <strong>{bothGeoreferenced ? "Yes" : "No"}</strong>
+      </span>
+      <p className="note">
+        This is informational only — the backend's compatibility check is the
+        authority on whether these two images can be analyzed together.
+      </p>
+    </div>
+  );
+}
 
 export default function InputWorkspace({
   images,
@@ -83,6 +109,7 @@ export default function InputWorkspace({
                 <IconPlus size={14} /> Add comparison image
               </button>
             )}
+            <PairSummary images={images} />
           </section>
         )}
 
@@ -99,8 +126,13 @@ export default function InputWorkspace({
 
         {error && <div className="error-banner">{error}</div>}
 
-        <button className="btn-analyze" onClick={onAnalyze}>
-          <IconPlay size={15} /> Analyze
+        <button
+          className="btn-analyze"
+          onClick={onAnalyze}
+          disabled={images.some((it) => it.uploading)}
+        >
+          <IconPlay size={15} />{" "}
+          {images.some((it) => it.uploading) ? "Uploading…" : "Analyze"}
         </button>
       </div>
 

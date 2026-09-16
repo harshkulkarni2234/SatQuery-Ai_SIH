@@ -104,15 +104,17 @@ def test_png_metadata(tmp_path):
 def test_corrupt_tif_raises(tmp_path):
     path = tmp_path / "corrupt.tif"
     path.write_bytes(os.urandom(256))
-    with pytest.raises(RasterIngestError):
+    with pytest.raises(RasterIngestError) as exc_info:
         extract_metadata(str(path))
+    assert str(tmp_path) not in str(exc_info.value)
 
 
 def test_non_image_renamed_to_tif_raises(tmp_path):
     path = tmp_path / "fake.tif"
     path.write_text("this is definitely not an image, just text pretending to be one")
-    with pytest.raises(RasterIngestError):
+    with pytest.raises(RasterIngestError) as exc_info:
         extract_metadata(str(path))
+    assert str(tmp_path) not in str(exc_info.value)
 
 
 def test_missing_file_raises(tmp_path):

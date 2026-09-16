@@ -1,17 +1,33 @@
 // Thin API client for the EXISTING SatQuery backend (schema-driven, no invented fields).
 
+import { USE_MOCKS, mockUploadResponse } from "./mocks/metadata.js";
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-async function uploadImage(file, modality) {
+async function uploadImage(file, modality, captureDate) {
+  if (USE_MOCKS) {
+    await new Promise((r) => setTimeout(r, 300));
+    return mockUploadResponse(file, modality);
+  }
   const form = new FormData();
   form.append("file", file);
   form.append("modality", modality);
+  if (captureDate) form.append("capture_date", captureDate);
   const res = await fetch("/images/upload", { method: "POST", body: form });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new ApiError(extractDetail(data, res), res.status);
   }
-  return data; // { image_id, filename, modality, crs, resolution_m }
+  return data; // { image_id, filename, modality, crs, resolution_m, metadata: RasterMetadata|null }
+}
+
+async function getImage(imageId) {
+  const res = await fetch(`/images/${imageId}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(extractDetail(data, res), res.status);
+  }
+  return data; // ImageDetailResponse
 }
 
 async function runQuery(queryText, imageIds) {
@@ -42,4 +58,4 @@ class ApiError extends Error {
   }
 }
 
-export { uploadImage, runQuery, ApiError };
+export { uploadImage, getImage, runQuery, ApiError };
