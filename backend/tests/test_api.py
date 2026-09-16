@@ -77,7 +77,7 @@ def test_query_rejects_nonexistent_ids():
 def test_query_valid_image_ids(uploaded_image_id, monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
-    from app.routes import query as query_module
+    from app.services import vqa as vqa_module
     client = TestClient(app)
 
     def fake_answer(image_path, query_text):
@@ -90,7 +90,7 @@ def test_query_valid_image_ids(uploaded_image_id, monkeypatch):
             "error": False,
         }
 
-    monkeypatch.setattr(query_module, "answer_question", fake_answer)
+    monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
 
     resp = client.post(
         "/query",

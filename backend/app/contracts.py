@@ -69,7 +69,7 @@ class SpecialistResult(BaseModel):
     confidence: Optional[float] = None
     confidence_source: str = "unavailable"
     model_or_tool: str
-    model_version: str
+    model_version: Optional[str] = None
     used_fallback: bool = False
     fallback_reason: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)

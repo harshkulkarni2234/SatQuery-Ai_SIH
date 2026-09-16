@@ -221,7 +221,7 @@ class TestChangeDetectionIntegration:
 class TestStubs:
 
     def test_vqa_executes_via_worker_path(self, monkeypatch):
-        from app.routes import query as query_module
+        from app.services import vqa as vqa_module
 
         image_id = upload_png_bytes(_solid_png((120, 120, 60)), modality="OPTICAL")
 
@@ -235,7 +235,7 @@ class TestStubs:
                 "error": False,
             }
 
-        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+        monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
 
         resp = client.post(
             "/query",
@@ -254,7 +254,7 @@ class TestStubs:
     def test_vqa_target_query_never_fabricates_boxes(self, monkeypatch):
         """Object-specific VQA questions get real deterministic grounding boxes
         when the object is detectable — and none otherwise."""
-        from app.routes import query as query_module
+        from app.services import vqa as vqa_module
 
         # Green optical image: vegetation IS detectable
         green_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
@@ -269,7 +269,7 @@ class TestStubs:
                 "error": False,
             }
 
-        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+        monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
 
         resp = client.post(
             "/query",
@@ -298,7 +298,7 @@ class TestStubs:
 
     def test_vqa_descriptive_query_reports_caption_cues_only(self, monkeypatch):
         """Open-ended descriptions must not claim localized boxes."""
-        from app.routes import query as query_module
+        from app.services import vqa as vqa_module
 
         image_id = upload_png_bytes(_solid_png((60, 140, 60)), modality="OPTICAL")
 
@@ -312,7 +312,7 @@ class TestStubs:
                 "error": False,
             }
 
-        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+        monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
 
         resp = client.post(
             "/query",

@@ -163,7 +163,6 @@ class TestVQAServicer:
 class TestVQARoute:
 
     def test_specialist_selected_request(self, monkeypatch):
-        from app.routes import query as query_module
         image_id = upload_png_bytes(_png_bytes(), modality="OPTICAL", name="spec.png")
 
         def fake_answer(image_path, query_text):
@@ -176,7 +175,7 @@ class TestVQARoute:
                 "error": False,
             }
 
-        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+        monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
 
         resp = client.post(
             "/query",
@@ -207,7 +206,6 @@ class TestVQARoute:
         assert body["confidence_score"] is None
 
     def test_confidence_null_in_trace(self, monkeypatch):
-        from app.routes import query as query_module
         image_id = upload_png_bytes(_png_bytes(), modality="OPTICAL", name="trace.png")
 
         def fake_answer(image_path, query_text):
@@ -220,7 +218,7 @@ class TestVQARoute:
                 "error": False,
             }
 
-        monkeypatch.setattr(query_module, "answer_question", fake_answer)
+        monkeypatch.setattr(vqa_module, "answer_question", fake_answer)
         resp = client.post(
             "/query",
             json={"query_text": "What is visible?", "image_ids": [image_id]},

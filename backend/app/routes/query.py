@@ -5,16 +5,13 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.contracts import CompatibilityReport
+from app.contracts import CompatibilityReport, specialist_result_to_legacy_response_fields
 from app.database import get_db
 from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
 from app.services.router import classify_query, extract_grounding_target
-from app.services.grounding import ground_object, scene_cues
-from app.services.change_detection import detect_change
-from app.services.vqa import answer_question
-from app.services.cross_modal import analyze_pair
 from app.services.compatibility import check_optical_sar_pair, check_temporal_pair
+from app.services.registry import select as select_specialist
 
 router = APIRouter(tags=["query"])
 
@@ -78,6 +75,9 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
 
     t0 = time.perf_counter()
     specialist_result = None
+    selected_entry = None
+    select_reason = None
+    rejected_specialists: list[dict] = []
     model_version = None
     bounding_boxes = None
     confidence = None
@@ -94,15 +94,19 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                     f"Image file for '{img.filename}' is missing on disk."
                 )
             target = classification.get("grounding_target")
-            specialist_result = ground_object(img.file_path, target)
-            answer_text = specialist_result["answer_text"]
-            confidence = specialist_result["confidence_score"]
-            bounding_boxes = specialist_result["bounding_boxes"] or None
+            selected_entry, select_reason, rejected_specialists = select_specialist(
+                "GROUNDING", image_dicts
+            )
+            specialist_result = selected_entry.handler(img.file_path, target)
+            legacy = specialist_result_to_legacy_response_fields(specialist_result)
+            answer_text = legacy["answer_text"]
+            confidence = legacy["confidence_score"]
+            bounding_boxes = legacy["bounding_boxes"] or None
             top_meta = {
-                "object_type": specialist_result["object_type"],
+                "object_type": target,
                 "num_regions": len(bounding_boxes or []),
-                "regions": specialist_result["regions"],
-                "method": specialist_result["method"],
+                "regions": specialist_result.evidence.get("regions"),
+                "method": "deterministic visual grounding",
                 "specialist": "grounding",
             }
 
@@ -137,33 +141,38 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 else None,
                 "modality": img_after.modality,
             }
-            specialist_result = detect_change(
+            selected_entry, select_reason, rejected_specialists = select_specialist(
+                "CHANGE_DETECTION", image_dicts
+            )
+            specialist_result = selected_entry.handler(
                 img_before.file_path,
                 img_after.file_path,
                 metadata_before=meta_before,
                 metadata_after=meta_after,
             )
-            answer_text = specialist_result["answer_text"]
-            bounding_boxes = specialist_result["bounding_boxes"] or None
-            if specialist_result["change_mask_path"]:
-                change_mask_path = specialist_result["change_mask_path"]
+            legacy = specialist_result_to_legacy_response_fields(specialist_result)
+            answer_text = legacy["answer_text"]
+            bounding_boxes = legacy["bounding_boxes"] or None
+            change_mask_path = legacy["change_mask_url"]  # path, not URL yet
+            overlay_path = legacy["overlay_url"]  # path, not URL yet
+            if change_mask_path:
                 change_mask_url = str(
                     request.url_for("masks", path=os.path.basename(change_mask_path))
                 )
-            if specialist_result["overlay_path"]:
-                overlay_path = specialist_result["overlay_path"]
+            if overlay_path:
                 overlay_url = str(
                     request.url_for("masks", path=os.path.basename(overlay_path))
                 )
+            stats = specialist_result.evidence.get("stats") or {}
             top_meta = {
-                "change_percentage": specialist_result["change_percentage"],
-                "num_regions": specialist_result["num_regions"],
-                "changed_pixels": specialist_result["changed_pixels"],
-                "total_pixels": specialist_result["total_pixels"],
-                "regions": specialist_result["regions"],
-                "validation_failed": specialist_result["validation_failed"],
-                "registration_applied": specialist_result["registration_applied"],
-                "reason": specialist_result["reason"],
+                "change_percentage": stats.get("change_percentage"),
+                "num_regions": stats.get("num_regions"),
+                "changed_pixels": stats.get("changed_pixels"),
+                "total_pixels": stats.get("total_pixels"),
+                "regions": stats.get("regions"),
+                "validation_failed": bool(specialist_result.warnings),
+                "registration_applied": stats.get("registration_applied"),
+                "reason": specialist_result.warnings[0] if specialist_result.warnings else None,
                 "specialist": "change_detection",
             }
 
@@ -173,44 +182,26 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception(
                     f"Image file for '{img.filename}' is missing on disk."
                 )
-            specialist_result = answer_question(img.file_path, body.query_text)
-            answer_text = specialist_result["answer_text"]
-            confidence = specialist_result.get("confidence_score")
-            model_version = specialist_result.get("model_version")
-
-            # Visual evidence for the VQA answer — never fabricated.
             grounding_target = extract_grounding_target(body.query_text)
-            visual_evidence = None
-            if grounding_target:
-                g = ground_object(img.file_path, grounding_target)
-                g_boxes = g["bounding_boxes"]
-                visual_evidence = {
-                    "available": bool(g_boxes),
-                    "target": grounding_target,
-                    "method": g["method"],
-                    "num_regions": len(g_boxes or []),
-                    "message": None
-                    if g_boxes
-                    else "Spatial localization unavailable for this analysis.",
-                }
-                if g_boxes:
-                    bounding_boxes = g_boxes
-            else:
-                cues = scene_cues(img.file_path)
-                visual_evidence = {
-                    "available": False,
-                    "message": "Spatial localization unavailable for this analysis.",
-                    "detected_cues": cues["detected_cues"],
-                    "dominant_cue": cues["dominant_cue"],
-                }
+            selected_entry, select_reason, rejected_specialists = select_specialist(
+                "VQA", image_dicts
+            )
+            specialist_result = selected_entry.handler(
+                img.file_path, body.query_text, grounding_target
+            )
+            legacy = specialist_result_to_legacy_response_fields(specialist_result)
+            answer_text = legacy["answer_text"]
+            confidence = legacy["confidence_score"]
+            model_version = legacy["model_version"]
+            bounding_boxes = specialist_result.evidence.get("boxes") or None
 
             top_meta = {
                 "specialist": "vqa",
                 "specialist_mode": "experimental"
-                if specialist_result.get("specialist")
+                if specialist_result.model_or_tool == "vqa.smolvlm_bigearthnet_lora_stage3"
                 else "base",
                 "model_version": model_version,
-                "visual_evidence": visual_evidence,
+                "visual_evidence": specialist_result.evidence.get("visual_evidence"),
             }
 
         elif task == "CROSS_MODAL":
@@ -242,22 +233,26 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception_with_report(
                     "These images are not compatible for cross-modal analysis.", compat_report
                 )
-            specialist_result = analyze_pair(
+            selected_entry, select_reason, rejected_specialists = select_specialist(
+                "CROSS_MODAL", image_dicts
+            )
+            specialist_result = selected_entry.handler(
                 optical_img.file_path, sar_img.file_path, body.query_text
             )
-            answer_text = specialist_result["answer_text"]
-            confidence = specialist_result.get("confidence_score")
-            model_version = specialist_result.get("model_version")
+            legacy = specialist_result_to_legacy_response_fields(specialist_result)
+            answer_text = legacy["answer_text"]
+            confidence = legacy["confidence_score"]
+            model_version = legacy["model_version"]
             top_meta = {
                 "specialist": "cross_modal",
                 "tool_version": model_version,
-                "modality_contribution_note": specialist_result[
+                "modality_contribution_note": specialist_result.evidence.get(
                     "modality_contribution_note"
-                ],
-                "spatial_correspondence_note": specialist_result.get(
+                ),
+                "spatial_correspondence_note": specialist_result.evidence.get(
                     "spatial_correspondence_note"
                 ),
-                "evidence": specialist_result["evidence"],
+                "evidence": specialist_result.evidence.get("per_modality"),
             }
 
         else:
@@ -279,10 +274,21 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
 
     if specialist_result is None:
         execution_status = "not_implemented"
-    elif specialist_result.get("error"):
+    elif specialist_result.used_fallback and specialist_result.fallback_reason:
         execution_status = "unavailable"
     else:
         execution_status = "completed"
+
+    used_fallback = bool(specialist_result and specialist_result.used_fallback) or bool(
+        selected_entry and selected_entry.spec.is_fallback
+    )
+    if selected_entry is not None:
+        top_meta["specialist_id"] = selected_entry.spec.id
+        top_meta["selection_reason"] = select_reason
+        top_meta["rejected_specialists"] = rejected_specialists
+        top_meta["used_fallback"] = used_fallback
+        top_meta["confidence_source"] = specialist_result.confidence_source
+        top_meta["warnings"] = specialist_result.warnings
 
     trace = ExecutionTrace(
         selected_tool=task,
