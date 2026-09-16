@@ -92,6 +92,26 @@ class SpecialistSpec(BaseModel):
     is_rs_adapted: bool = False
 
 
+# ── Execution plan (A5) ───────────────────────────────────────────────────
+
+QuestionType = Literal["presence", "count", "description", "location", "change", "comparison"]
+
+
+class ExecutionPlan(BaseModel):
+    task: Optional[SpecialistTask] = None
+    target: Optional[str] = None
+    question_type: Optional[QuestionType] = None
+    requested_outputs: list[str] = Field(default_factory=list)
+    validation_passed: bool
+    validation_reason: str
+    suggestion: Optional[str] = None
+    compatibility: Optional[CompatibilityReport] = None
+    selected_specialist_id: Optional[str] = None
+    selection_reason: Optional[str] = None
+    rejected_specialists: list[dict[str, str]] = Field(default_factory=list)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+
+
 # ── Execution trace (A5/A6) ──────────────────────────────────────────────
 
 TraceStep = Literal[

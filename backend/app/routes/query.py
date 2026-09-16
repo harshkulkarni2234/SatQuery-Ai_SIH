@@ -5,13 +5,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.contracts import CompatibilityReport, specialist_result_to_legacy_response_fields
+from app.contracts import specialist_result_to_legacy_response_fields
 from app.database import get_db
 from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
-from app.services.router import classify_query, extract_grounding_target
-from app.services.compatibility import check_optical_sar_pair, check_temporal_pair
-from app.services.registry import select as select_specialist
+from app.services.router import extract_grounding_target
+from app.services.planner import build_plan
 
 router = APIRouter(tags=["query"])
 
@@ -21,13 +20,11 @@ def _tracked_exception(message: str, status_code: int = 400) -> HTTPException:
     return HTTPException(status_code=status_code, detail=message)
 
 
-def _tracked_exception_with_report(
-    message: str, report: CompatibilityReport, status_code: int = 422
-) -> HTTPException:
-    return HTTPException(
-        status_code=status_code,
-        detail={"message": message, "compatibility": report.model_dump()},
-    )
+def _tracked_exception_for_plan(plan, status_code: int) -> HTTPException:
+    detail = {"message": plan.validation_reason, "suggestion": plan.suggestion}
+    if plan.compatibility is not None:
+        detail["compatibility"] = plan.compatibility.model_dump()
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 def _compat_dict(img: Image) -> dict:
@@ -62,22 +59,22 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
     by_id = {img.id: img for img in images}
     ordered_images = [by_id[i] for i in body.image_ids]
 
-    image_dicts = [
-        {"id": str(img.id), "modality": img.modality, "capture_date": img.capture_date}
-        for img in ordered_images
-    ]
-    classification = classify_query(body.query_text, image_dicts)
+    image_dicts = [{"id": str(img.id), **_compat_dict(img)} for img in ordered_images]
 
-    if not classification["validation_passed"]:
-        raise _tracked_exception(classification["reason"])
+    plan_result = build_plan(body.query_text, image_dicts)
+    plan = plan_result.plan
 
-    task = classification["task_classified"]
+    if not plan.validation_passed:
+        status_code = 422 if plan.compatibility is not None else 400
+        raise _tracked_exception_for_plan(plan, status_code)
+
+    task = plan.task
+    selected_entry = plan_result.selected_entry
+    select_reason = plan.selection_reason
+    rejected_specialists = plan.rejected_specialists
 
     t0 = time.perf_counter()
     specialist_result = None
-    selected_entry = None
-    select_reason = None
-    rejected_specialists: list[dict] = []
     model_version = None
     bounding_boxes = None
     confidence = None
@@ -93,10 +90,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception(
                     f"Image file for '{img.filename}' is missing on disk."
                 )
-            target = classification.get("grounding_target")
-            selected_entry, select_reason, rejected_specialists = select_specialist(
-                "GROUNDING", image_dicts
-            )
+            target = plan.target
             specialist_result = selected_entry.handler(img.file_path, target)
             legacy = specialist_result_to_legacy_response_fields(specialist_result)
             answer_text = legacy["answer_text"]
@@ -118,13 +112,6 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception(
                     "One or more image files for change detection are missing on disk."
                 )
-            compat_report = check_temporal_pair(
-                _compat_dict(img_before), _compat_dict(img_after)
-            )
-            if not compat_report.ok:
-                raise _tracked_exception_with_report(
-                    "These images are not compatible for change detection.", compat_report
-                )
             meta_before = {
                 "crs": img_before.crs,
                 "bbox_coords": img_before.bbox_coords,
@@ -141,9 +128,6 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 else None,
                 "modality": img_after.modality,
             }
-            selected_entry, select_reason, rejected_specialists = select_specialist(
-                "CHANGE_DETECTION", image_dicts
-            )
             specialist_result = selected_entry.handler(
                 img_before.file_path,
                 img_after.file_path,
@@ -183,9 +167,6 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                     f"Image file for '{img.filename}' is missing on disk."
                 )
             grounding_target = extract_grounding_target(body.query_text)
-            selected_entry, select_reason, rejected_specialists = select_specialist(
-                "VQA", image_dicts
-            )
             specialist_result = selected_entry.handler(
                 img.file_path, body.query_text, grounding_target
             )
@@ -226,16 +207,6 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 raise _tracked_exception(
                     f"Image file for '{missing[0].filename}' is missing on disk."
                 )
-            compat_report = check_optical_sar_pair(
-                _compat_dict(optical_img), _compat_dict(sar_img)
-            )
-            if not compat_report.ok:
-                raise _tracked_exception_with_report(
-                    "These images are not compatible for cross-modal analysis.", compat_report
-                )
-            selected_entry, select_reason, rejected_specialists = select_specialist(
-                "CROSS_MODAL", image_dicts
-            )
             specialist_result = selected_entry.handler(
                 optical_img.file_path, sar_img.file_path, body.query_text
             )
@@ -289,14 +260,16 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         top_meta["used_fallback"] = used_fallback
         top_meta["confidence_source"] = specialist_result.confidence_source
         top_meta["warnings"] = specialist_result.warnings
+    top_meta["plan"] = plan.model_dump()
 
+    modalities_detected = [img.modality for img in ordered_images if img.modality in ("OPTICAL", "SAR")]
     trace = ExecutionTrace(
         selected_tool=task,
         model_version=model_version,
-        modalities_detected=classification["modalities_detected"],
+        modalities_detected=modalities_detected,
         confidence_score=confidence,
         execution_time_ms=elapsed_ms,
-        reason=classification["reason"],
+        reason=plan.validation_reason,
         execution_status=execution_status,
     )
 
@@ -320,7 +293,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         metadata_={
             **top_meta,
             "overlay_path": overlay_path,
-            "reason": classification["reason"],
+            "reason": plan.validation_reason,
             "execution_status": execution_status,
             "execution_trace": trace.model_dump(),
         },

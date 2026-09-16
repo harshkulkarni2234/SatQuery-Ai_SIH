@@ -111,7 +111,7 @@ class TestGroundingIntegration:
             json={"query_text": "Show me the water", "image_ids": [id1, id2]},
         )
         assert resp.status_code == 400
-        assert "exactly 1 image" in resp.json()["detail"]
+        assert "exactly 1 image" in resp.json()["detail"]["message"]
 
 
 # ── CHANGE DETECTION ──────────────────────────────────────────────────
@@ -197,7 +197,7 @@ class TestChangeDetectionIntegration:
             json={"query_text": "What changed?", "image_ids": [image_id]},
         )
         assert resp.status_code == 400
-        assert "exactly 2 images" in resp.json()["detail"]
+        assert "exactly 2 images" in resp.json()["detail"]["message"]
 
     def test_optical_sar_pair_routed_to_cross_modal_even_with_change_wording(self):
         # An OPTICAL + SAR pair is routed to CROSS_MODAL before change
@@ -375,7 +375,7 @@ class TestStubs:
             json={"query_text": "Analyze this image pair together", "image_ids": [optical_id, optical2_id]},
         )
         assert resp.status_code == 400
-        assert "OPTICAL + SAR" in resp.json()["detail"]
+        assert "OPTICAL + SAR" in resp.json()["detail"]["message"]
 
 
 # ── Generic validation ────────────────────────────────────────────────
