@@ -29,7 +29,7 @@ Legend: `done` / `in_progress` / `blocked` / `todo`
 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
-| A3 — Geospatial compatibility engine | todo | | |
+| A3 — Geospatial compatibility engine | done | (pending) | `backend/app/services/compatibility.py`: `check_temporal_pair` (modality match, date-distinct with WARN not FAIL on missing dates, CRS match, bbox-IoU overlap vs `MIN_OVERLAP` env default 0.5, resolution-ratio WARN >1.5x, SKIPPED geo checks when not georeferenced), `check_optical_sar_pair` (same checks + `coregistration`: "verified" only when same CRS and matching transform grid, "assumed" behind an opt-in `coregistered_hint` param not yet wired to an upload field — documented gap, "unverified" otherwise), `check_single_image`. Wired into `routes/query.py` before dispatching CHANGE_DETECTION/CROSS_MODAL: FAIL -> 422 with `{message, compatibility}` body; the pre-existing `_temporal_metadata_compatible` same-date short-circuit in `services/router.py` is untouched (still runs first, during classification). 14 unit tests on synthetic dicts (same-date, non-overlapping, different CRS, wrong modality, non-georeferenced, verified co-registered) + 3 new API-level integration tests through real GeoTIFF uploads (non-overlapping pair -> 422 with report; overlapping pair -> 200; optical+SAR overlapping -> 200). 147 backend tests pass. |
 | A4 — Specialist registry (GATE G2) | todo | | |
 | B3 — Evaluation framework scaffold | todo | | |
 | B4 — RSVQA runner | todo | | |

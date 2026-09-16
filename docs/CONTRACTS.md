@@ -60,7 +60,16 @@ two-image task.
 ```
 
 On `ok: false` the API returns HTTP 422 with this report embedded — the
-system never runs a comparison it can't justify.
+system never runs a comparison it can't justify:
+
+```json
+{
+  "detail": {
+    "message": "These images are not compatible for change detection.",
+    "compatibility": { "ok": false, "checks": ["..."], "overlap_ratio": 0.12, "coregistration": null, "alignment_possible": false }
+  }
+}
+```
 
 ## SpecialistResult
 

@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.contracts import CompatibilityReport
 from app.database import get_db
 from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
@@ -13,6 +14,7 @@ from app.services.grounding import ground_object, scene_cues
 from app.services.change_detection import detect_change
 from app.services.vqa import answer_question
 from app.services.cross_modal import analyze_pair
+from app.services.compatibility import check_optical_sar_pair, check_temporal_pair
 
 router = APIRouter(tags=["query"])
 
@@ -20,6 +22,34 @@ router = APIRouter(tags=["query"])
 def _tracked_exception(message: str, status_code: int = 400) -> HTTPException:
     """Raise a client-safe error that never leaks internals."""
     return HTTPException(status_code=status_code, detail=message)
+
+
+def _tracked_exception_with_report(
+    message: str, report: CompatibilityReport, status_code: int = 422
+) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"message": message, "compatibility": report.model_dump()},
+    )
+
+
+def _compat_dict(img: Image) -> dict:
+    resolution = None
+    if img.transform:
+        resolution = (abs(img.transform[0]), abs(img.transform[4]))
+    elif img.resolution_m is not None:
+        resolution = (img.resolution_m, img.resolution_m)
+    return {
+        "modality": img.modality,
+        "capture_date": str(img.capture_date) if img.capture_date else None,
+        "is_georeferenced": bool(img.is_georeferenced),
+        "crs": img.crs,
+        "bounds_wgs84": tuple(img.bounds_wgs84) if img.bounds_wgs84 else None,
+        "resolution": resolution,
+        "transform": tuple(img.transform) if img.transform else None,
+        "width": img.width,
+        "height": img.height,
+    }
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -83,6 +113,13 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
             ):
                 raise _tracked_exception(
                     "One or more image files for change detection are missing on disk."
+                )
+            compat_report = check_temporal_pair(
+                _compat_dict(img_before), _compat_dict(img_after)
+            )
+            if not compat_report.ok:
+                raise _tracked_exception_with_report(
+                    "These images are not compatible for change detection.", compat_report
                 )
             meta_before = {
                 "crs": img_before.crs,
@@ -197,6 +234,13 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
             if missing:
                 raise _tracked_exception(
                     f"Image file for '{missing[0].filename}' is missing on disk."
+                )
+            compat_report = check_optical_sar_pair(
+                _compat_dict(optical_img), _compat_dict(sar_img)
+            )
+            if not compat_report.ok:
+                raise _tracked_exception_with_report(
+                    "These images are not compatible for cross-modal analysis.", compat_report
                 )
             specialist_result = analyze_pair(
                 optical_img.file_path, sar_img.file_path, body.query_text
