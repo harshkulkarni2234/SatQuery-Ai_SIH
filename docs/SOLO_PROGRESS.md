@@ -65,8 +65,8 @@ Legend: `done` / `in_progress` / `blocked` / `todo`
 
 | Phase | Status | Commit | Notes |
 |---|---|---|---|
-| A9 — Cold-start & final integration | todo | | |
-| C10 — Final cold-start rehearsal | todo | | |
+| A9 — Cold-start & final integration | done | `e829dc5` | Ran together with C10 (solo — see that row for the full rehearsal). Real, genuine fresh `git clone` (not a different physical laptop — documented honestly) caught a real bug: `requirements.txt` alone couldn't run the test suite (`pytest`/`httpx` missing) — fixed via new `backend/requirements-dev.txt` + README update, then re-verified clean from a second fresh clone. `alembic upgrade head` runs cleanly from an empty DB (4 migrations, no manual schema edits). No-internet-dependency verified by code review (zero outbound calls in the 3 deterministic specialists; VQA worker's `from_pretrained` is internet-free with a local `MODEL_DIR`) rather than physically toggling Wi-Fi — documented as a substitute, not claimed as equivalent. Tagged `sih-final`. |
+| C10 — Final cold-start rehearsal | done | `e829dc5` | `docs/FINAL_CHECKLIST.md` ticks all 10 of this phase's own checklist items with real evidence (the plan file provided for this build has no "section 9" to copy from — only sections 0–6 — so the checklist is built directly from C10's own spec text, stated honestly rather than fabricating a nonexistent section). All 3 real demo scenarios run live in the browser against the freshly-cloned-and-built stack (not the main dev checkout), each downloading a real, non-trivial `%PDF`-verified report. VQA-worker-down fallback confirmed live and honest (worker was never started in this rehearsal): UI showed `[VQA unavailable]` in the answer text, `Unavailable` confidence, and an explanatory warnings banner — never a fabricated caption. `scripts/smoke_test.sh` PASSed against the fresh clone (and was separately confirmed to correctly FAIL against an unreachable URL, so the check itself isn't a rubber stamp). One real failure found and fixed (see A9's row); no others. Timings and artifact paths recorded in the checklist. |
 
 ## Environment notes (persist across sessions)
 
