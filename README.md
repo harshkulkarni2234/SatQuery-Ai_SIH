@@ -190,11 +190,19 @@ appears automatically in dev mode.
 
 ## Tests and build
 
-Backend tests (226 passing as of this writing — run it yourself for the
-current number, don't trust a stale count):
+Backend tests need `pytest`/`httpx` on top of the runtime dependencies
+(`fastapi.testclient.TestClient` requires `httpx`) — install
+`requirements-dev.txt` once, on top of `requirements.txt` from setup:
 
 ```bash
 cd backend
+pip install -r requirements-dev.txt
+```
+
+Then run the suite (226 passing as of this writing — run it yourself for
+the current number, don't trust a stale count):
+
+```bash
 venv_mac/bin/python -m pytest -q      # Windows: venv\Scripts\python.exe -m pytest -q
 ```
 

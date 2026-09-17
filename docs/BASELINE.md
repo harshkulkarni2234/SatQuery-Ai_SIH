@@ -58,6 +58,50 @@ At the start of this session, `git status` showed local, uncommitted modificatio
 
 These predate Phase A0 and were left untouched (not authored by this build effort).
 
-## Final (filled in at Phase A9/C10)
+## Final (Phase A9/C10, recorded after a genuine fresh-clone rehearsal)
 
-_Not yet recorded._
+See `docs/FINAL_CHECKLIST.md` for the full rehearsal log. Summary:
+
+- **Fresh-clone setup**: cloned the local repo (`git clone` from the working
+  tree, not a physically different laptop — see the checklist for why) into
+  `/tmp/sih_final_rehearsal/satquery-ai-fresh`, followed `README.md`
+  verbatim: fresh `venv_mac`, `pip install -r requirements.txt`, fresh
+  Postgres database (`satquery_final_rehearsal`), `alembic upgrade head`
+  from empty, `npm install`, `npm run build`.
+- **Found and fixed one real missing-step gap**: `pip install -r
+  requirements.txt` alone left `pytest -q` failing with `No module named
+  pytest` — `pytest`/`httpx` were never in `requirements.txt` and there was
+  no dev-requirements file. Added `backend/requirements-dev.txt` and
+  updated the README's setup and "Tests and build" sections to install it.
+  This is exactly the kind of gap this rehearsal exists to catch.
+- **Backend tests from the fresh clone (after the fix above)**: **226
+  passed**, 0 failures, 55 warnings (all pre-existing rasterio/starlette
+  deprecation notices, not from project code — same warning set as the
+  main dev checkout).
+- **Frontend build from the fresh clone**: succeeds, 59 modules
+  transformed, `dist/assets/index-*.js` 187.65 kB (matches the main dev
+  checkout's build exactly — same source, same result).
+- **`scripts/start_all.sh` + `scripts/smoke_test.sh`** run against the
+  fresh clone: both real commands, both real `PASS`.
+- **All 3 demo scenarios run in the live UI** against the fresh-clone
+  backend (not the main dev checkout) via the "Load demo scenario" panel;
+  a real PDF report downloaded for each (`report_A.pdf` 261 KB, `report_B.pdf`
+  768 KB, `report_C.pdf` 78 KB — sizes differ because each scenario embeds
+  different real evidence images).
+- **VQA-worker-down fallback**: the worker was never started in this
+  rehearsal, so the single-image VQA query exercised the real fallback
+  path live: the UI showed a `WARNINGS` banner ("VQA worker unavailable;
+  answer is an honest unavailability notice, not a model response"),
+  `CONFIDENCE: Unavailable`, and an answer text explicitly prefixed
+  `[VQA unavailable]` — never a fabricated caption.
+- **No-internet-dependency**: verified by code review rather than
+  physically disconnecting Wi-Fi (see `docs/FINAL_CHECKLIST.md` for why).
+  Confirmed: the three deterministic specialists (grounding, change
+  detection, cross-modal) make zero outbound network calls; the backend
+  only ever calls the VQA worker on `127.0.0.1`; the VQA worker's own
+  `from_pretrained(MODEL_DIR)` call is internet-free when `MODEL_DIR`
+  points at a local snapshot (as the README's "no-download setup" note
+  already recommends) and otherwise downloads once from Hugging Face Hub
+  and caches locally for every run after.
+- Tagged `sih-final` on the commit that includes this rehearsal's fix and
+  documentation.
