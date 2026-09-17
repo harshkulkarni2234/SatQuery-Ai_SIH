@@ -6,36 +6,81 @@ Built for Phases B3–B6 of the original 3-person plan (`docs/satquery-master-bu
 
 The original plan (B4/B5/B6) called for downloading and running against
 **RSVQA, CDVQA, and VRSBench** — official, labeled remote-sensing benchmark
-datasets. That did not happen in this build: when reached, downloading
-those datasets required explicit user permission per this build's own
-process (large third-party downloads), and the user's actual instruction
-was **"you can use the dataset available in the testing folder"** instead.
+datasets. Early in this build, when first reached, that didn't happen:
+downloading those datasets needed explicit permission per this project's
+process, and the instruction at the time was to use the local `testing/`
+folder instead (see the "Unlabeled smoke test" section below — that
+folder genuinely has zero label files, so it can only produce
+routing/latency statistics, never accuracy).
+
+**That has since changed for RSVQA.** The real, official SIH26167 problem
+statement explicitly names RSVQA, VRSBench, and CDVQA as the prescribed
+public benchmarks — so fetching them is no longer a workaround, it's
+literally what's asked for. RSVQA-LR was fetched (with explicit
+permission) and run for real — see "Real labeled benchmark: RSVQA-LR"
+below for actual, computed accuracy numbers, not routing statistics.
+CDVQA/VRSBench are pending the same explicit-permission step (CDVQA's
+underlying images come from the SECOND dataset, a ~3.79GB Google-Drive-only
+download with an unstated license — flagged separately before fetching).
+
+## Real labeled benchmark: RSVQA-LR
+
+**Source**: official Zenodo record [6344334](https://zenodo.org/records/6344334)
+(Lobry et al.), **CC-BY-4.0** — see `evaluation/rsvqa_lr/README.md` for
+the exact download commands. Only the official **test** split was used
+(100 images, 10,004 labeled questions) — not train/val, since this is
+evaluation-only.
+
+**What was run**: the *existing, untrained* base SmolVLM-256M-Instruct
+VQA specialist (no LoRA fine-tuning applied — that's what the RTX 2050
+training session is for) against a fixed-seed stratified sample (60
+questions per type, capped at the type's real total — 240 total) via the
+real `/query` API, scored with `metrics/vqa_metrics.py` against the real
+ground truth. Reproduce:
+
+```bash
+python -m evaluation.runners.run_rsvqa_lr_eval --per-type 60 \
+    --output evaluation/results/rsvqa_lr_eval.jsonl
+python -m evaluation.results.score_rsvqa_lr evaluation/results/rsvqa_lr_eval.jsonl
+```
+
+**Real results** (`evaluation/results/rsvqa_lr_score.json`, 0 errors across
+240 real samples):
+
+| Question type | n scored | Accuracy | Metric |
+|---|---|---|---|
+| presence (e.g. "Is there a road?") | 60 | **73.3%** | yes/no |
+| comp (e.g. "Are there more X than Y?") | 60 | **65.0%** | yes/no |
+| rural_urban | 59 (1 unparseable) | **40.7%** | categorical keyword match |
+| count (e.g. "How many roads?") | 34 (26 unparseable) | **0% exact**, RMSE 206.6 | count regression |
+
+This is a real **pre-training baseline** for the base model, not its
+ceiling — the whole point of running it now is to have a genuine
+before/after once the RTX 2050 session fine-tunes a LoRA adapter on this
+same task family. Two honest things this run surfaced, not smoothed
+over:
+- The base model **cannot reliably count** — 26/60 count answers didn't
+  even contain an extractable number, and the 34 that did were wildly
+  off (RMSE 206.6 against real counts that go into the hundreds).
+- A real scoring bug was caught and fixed while reviewing raw output:
+  the first pass used literal string equality for rural_urban, which
+  scored a genuinely correct free-text answer ("It is an urban area.")
+  as wrong against ground truth "urban". Fixed with a new
+  `categorical_accuracy` metric (extracts the matching keyword from free
+  text, same approach as the existing `parse_yes_no`) — with its own
+  unit test reproducing the exact bug. The corrected number (40.7%) is
+  what's reported above; the broken first pass (1.7%) is not.
+
+## Unlabeled smoke test: local `testing/` folder
 
 The local `testing/` folder (inventoried in Phase B1 — see
 `data/manifest.json`'s `unused_raw_material` entry) contains ~4,000 real
 Sentinel-2 optical patches, 1 real Sentinel-1 SAR image, and a handful of
 misc images — but **zero label files of any kind** (verified: no
 `.json`/`.csv`/`.txt`/label file anywhere under it). There is no ground
-truth in this data to compute RSVQA/CDVQA/VRSBench-style accuracy against.
-
-So what actually exists here is:
-
-1. **A real, working evaluation framework** (`runners/base.py`,
-   `metrics/`, `results/generate_summary.py`) — dataset-independent,
-   fully unit-tested, ready to point at a real labeled benchmark the
-   moment one is fetched.
-2. **One real runner** (`runners/run_testing_folder_eval.py` +
-   `runners/testing_folder_adapter.py`) that drives the live SatQuery
-   backend over its real HTTP API against a seeded random sample of
-   `testing/`'s real images, using the same two fixed prompts as the C9
-   demo scenario A card. It records real, measured system-behavior
-   statistics (task routing, specialist selection, latency, confidence
-   availability, error rate, fallback rate) — **it does not and cannot
-   report accuracy**, because there is no ground truth to score against.
-
-**If you are looking for RSVQA/CDVQA/VRSBench numbers for this project:
-they do not exist. Do not present the numbers below as benchmark accuracy
-— they are routing/latency/error statistics, not correctness scores.**
+truth in this data, so the run described here reports real
+routing/latency/error statistics, never accuracy — do not read the
+numbers in `results/SUMMARY.md` as correctness scores.
 
 ## Layout
 
@@ -43,17 +88,21 @@ they do not exist. Do not present the numbers below as benchmark accuracy
 evaluation/
 ├── runners/
 │   ├── base.py                      # generic sample -> HTTP API -> JSONL runner (resumable, --limit)
-│   ├── testing_folder_adapter.py    # the ONE dataset adapter that exists (unlabeled, see its docstring)
-│   └── run_testing_folder_eval.py   # CLI entry point
+│   ├── testing_folder_adapter.py    # unlabeled smoke-test adapter (see its docstring)
+│   ├── run_testing_folder_eval.py   # CLI entry point for the smoke test
+│   ├── rsvqa_lr_adapter.py          # REAL labeled adapter — official RSVQA-LR test split
+│   └── run_rsvqa_lr_eval.py         # CLI entry point for the real RSVQA-LR eval
 ├── metrics/
-│   ├── vqa_metrics.py               # exact-match, yes/no, count accuracy/RMSE (unit-tested, unused by
-│   ├── spatial_metrics.py           # box IoU/acc@0.5, pixel-level change F1/IoU  the current run — no
-│   └── text_metrics.py              # lightweight BLEU-n / ROUGE-L                labeled data to score)
+│   ├── vqa_metrics.py               # exact-match, yes/no, categorical, count accuracy/RMSE —
+│   ├── spatial_metrics.py           # box IoU/acc@0.5, pixel-level change F1/IoU   used for real
+│   └── text_metrics.py              # lightweight BLEU-n / ROUGE-L                 on RSVQA-LR now
 ├── results/
-│   ├── generate_summary.py          # JSONL -> SUMMARY.md (real stats only, never fabricates accuracy)
-│   └── *.jsonl, SUMMARY.md          # actual run output (git-ignored except this README)
+│   ├── generate_summary.py          # unlabeled run -> SUMMARY.md (never fabricates accuracy)
+│   ├── score_rsvqa_lr.py            # REAL labeled run -> real per-type accuracy JSON
+│   └── *.jsonl, *_score.json, SUMMARY.md  # actual run output (JSONL git-ignored, scored JSON/MD committed)
+├── rsvqa_lr/README.md               # official source, license, exact download commands
 ├── configs/                         # reserved for future labeled-benchmark configs (empty today)
-├── tests/                           # unit tests for metrics/, hand-computed examples (23 tests)
+├── tests/                           # unit tests for metrics/, hand-computed examples (25 tests)
 └── requirements.txt                 # numpy, requests, pytest — separate from backend/requirements.txt
 ```
 
@@ -91,33 +140,31 @@ cd /path/to/satquery-ai
 python -m pytest evaluation/tests -q
 ```
 
-23 tests, all with hand-computed expected values (not just "does it not
+25 tests, all with hand-computed expected values (not just "does it not
 crash") — e.g. `pixel_mask_f1_iou` is tested against a manually-solved
 2×2 mask where precision/recall/F1/IoU are all worked out by hand in the
-test's own comment. These test the metric functions in isolation; they
-are not run against the testing/-folder data (which has no labels for
-them to score).
+test's own comment, and `categorical_accuracy` has a regression test
+reproducing the exact free-text-matching bug found while scoring the
+real RSVQA-LR run (see above).
 
-## Real run recorded in this repo
+## CDVQA and VRSBench (pending)
 
-One smoke run was actually executed against a live backend and its real
-output is summarized in `results/SUMMARY.md` (regenerate with the command
-above against `results/testing_folder_smoke.jsonl` — the JSONL itself is
-git-ignored as generated output, per the project's convention for runtime
-artifacts). See that file for the real numbers: sample count, task
-routing distribution, specialist distribution, error rate, latency
-percentiles, confidence-availability rate. All of it is measured system
-behavior, none of it is benchmark accuracy.
+Both are named in the official problem statement. CDVQA's question/answer
+labels are clean (official GitHub repo, Apache-2.0, no download friction),
+but its images come from the SECOND dataset — Google-Drive-only, ~3.79GB,
+license entirely unstated on the official page. VRSBench hasn't been
+researched yet. Neither is fetched in this build as of this writing;
+follow the same pattern as `rsvqa_lr_adapter.py`/`run_rsvqa_lr_eval.py`
+once permission is given and the raw data is in hand:
 
-## If a real labeled benchmark is fetched later
-
-1. Get explicit permission for the download (per this project's process).
-2. Write a new adapter under `runners/` following
-   `testing_folder_adapter.py`'s `generate_samples()` shape, but with
-   `meta["ground_truth"]` populated from the real labels.
-3. Extend `results/generate_summary.py` (or write a benchmark-specific
-   summary script) to call the appropriate function in `metrics/` — they
-   are already implemented and unit-tested, just never wired to real
-   ground truth in this build.
-4. Update this README's "What this is, honestly" section — don't leave
-   it claiming no ground truth exists once one does.
+1. Get explicit permission for the download (per this project's process
+   — flag exact size and license before fetching, same as every other
+   external dataset in this build).
+2. Write a new adapter under `runners/` following `rsvqa_lr_adapter.py`'s
+   shape (real ground truth in `meta`, documented stratified sampling if
+   the full set is too slow to run serially).
+3. Write a benchmark-specific scorer following `score_rsvqa_lr.py`'s
+   shape, calling the appropriate function in `metrics/` — grounding
+   uses `spatial_metrics.grounding_acc_at_iou`, captioning would need
+   `text_metrics.bleu_n`/`rouge_l` (implemented, unit-tested, never yet
+   run against real labeled captions).

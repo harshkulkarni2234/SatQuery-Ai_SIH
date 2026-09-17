@@ -1,9 +1,11 @@
 import pytest
 
 from evaluation.metrics.vqa_metrics import (
+    categorical_accuracy,
     count_accuracy_rmse,
     exact_match_accuracy,
     normalize_answer,
+    parse_categorical,
     parse_count,
     parse_yes_no,
     yes_no_accuracy,
@@ -54,6 +56,27 @@ def test_parse_count():
     assert parse_count("There are 3 buildings") == 3.0
     assert parse_count("no number here") is None
     assert parse_count("-2.5 change") == -2.5
+
+
+def test_parse_categorical_free_text():
+    assert parse_categorical("It is an urban area.", ["urban", "rural"]) == "urban"
+    assert parse_categorical("This looks rural to me", ["urban", "rural"]) == "rural"
+    assert parse_categorical("I cannot tell", ["urban", "rural"]) is None
+    # both present -> ambiguous, not a guess
+    assert parse_categorical("urban or rural, hard to say", ["urban", "rural"]) is None
+
+
+def test_categorical_accuracy_hand_computed():
+    # real bug this was written to catch: exact_match_accuracy would score
+    # "It is an urban area." against ground truth "urban" as WRONG (no
+    # literal string equality) even though it's a correct free-text answer
+    preds = ["It is an urban area.", "This is a rural region.", "unclear image"]
+    gts = ["urban", "urban", "rural"]
+    result = categorical_accuracy(preds, gts, ["urban", "rural"])
+    assert result["n_total"] == 3
+    assert result["n_unparseable"] == 1
+    assert result["n_scored"] == 2
+    assert result["accuracy"] == 0.5  # 1st correct (urban==urban), 2nd wrong (rural!=urban)
 
 
 def test_count_accuracy_rmse_hand_computed():

@@ -34,6 +34,50 @@ def exact_match_accuracy(predictions: list[str], ground_truths: list[str]) -> fl
     return correct / len(predictions)
 
 
+def parse_categorical(text: str, vocabulary: list[str]) -> Optional[str]:
+    """Extract which one of a small closed vocabulary (e.g. ["urban", "rural"])
+    appears in free text. Returns None (not a guess) if none of the
+    vocabulary words appear, or if more than one does (ambiguous) — added
+    after a real scoring bug: exact_match_accuracy requires literal string
+    equality, so a real, correct free-text answer like "It is an urban
+    area." never matched a bare "urban" ground truth. This generalizes
+    parse_yes_no's approach to any small fixed vocabulary."""
+    normalized = normalize_answer(text)
+    tokens = set(normalized.split())
+    matches = [word for word in vocabulary if word in tokens]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def categorical_accuracy(predictions: list[str], ground_truths: list[str], vocabulary: list[str]) -> dict:
+    """Accuracy over small-closed-vocabulary free-text answers (e.g.
+    rural/urban). Predictions that can't be resolved to exactly one
+    vocabulary word are excluded from the denominator, same convention as
+    yes_no_accuracy — never silently scored as wrong."""
+    if not predictions:
+        raise ValueError("categorical_accuracy: empty predictions")
+    if len(predictions) != len(ground_truths):
+        raise ValueError("predictions and ground_truths must be the same length")
+    correct = 0
+    unparseable = 0
+    scored = 0
+    for pred, gt in zip(predictions, ground_truths):
+        parsed = parse_categorical(pred, vocabulary)
+        if parsed is None:
+            unparseable += 1
+            continue
+        scored += 1
+        if parsed == normalize_answer(gt):
+            correct += 1
+    return {
+        "accuracy": (correct / scored) if scored else None,
+        "n_scored": scored,
+        "n_unparseable": unparseable,
+        "n_total": len(predictions),
+    }
+
+
 _YES_WORDS = {"yes", "y", "true"}
 _NO_WORDS = {"no", "n", "false"}
 

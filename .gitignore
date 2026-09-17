@@ -41,6 +41,12 @@ scripts/.logs/
 # evaluation/results/SUMMARY.md itself IS committed as recorded evidence.
 evaluation/results/*.jsonl
 
+# Real labeled benchmark raw data (fetched from official sources, see each
+# evaluation/<name>/README.md for the exact download commands) — not
+# committed, same size-based reasoning as testing/.
+evaluation/rsvqa_lr/raw/
+evaluation/levir_cd/raw/
+
 # IDE
 .vscode/
 .idea/

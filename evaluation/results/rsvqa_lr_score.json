@@ -1,0 +1,47 @@
+{
+  "benchmark": "RSVQA-LR (real official test split)",
+  "dataset": "https://zenodo.org/records/6344334 (CC-BY-4.0)",
+  "model": "SmolVLM-256M-Instruct (base, no LoRA \u2014 see note)",
+  "note": "Base model only, NOT fine-tuned on this dataset (that's what the RTX 2050 training session is for). This is a real pre-training baseline, not the model's ceiling.",
+  "n_total_rows": 240,
+  "n_errors": 0,
+  "by_question_type": {
+    "rural_urban": {
+      "n": 60,
+      "metric": "categorical_accuracy (urban/rural keyword match in free text)",
+      "accuracy": 0.4067796610169492,
+      "n_scored": 59,
+      "n_unparseable": 1,
+      "n_total": 60
+    },
+    "presence": {
+      "n": 60,
+      "n_ground_truth_unparseable": 0,
+      "metric": "yes_no_accuracy",
+      "accuracy": 0.7333333333333333,
+      "n_scored": 60,
+      "n_unparseable": 0,
+      "n_total": 60
+    },
+    "comp": {
+      "n": 60,
+      "n_ground_truth_unparseable": 0,
+      "metric": "yes_no_accuracy",
+      "accuracy": 0.65,
+      "n_scored": 60,
+      "n_unparseable": 0,
+      "n_total": 60
+    },
+    "count": {
+      "n": 60,
+      "metric": "count_accuracy_rmse",
+      "rmse": 206.61643918424417,
+      "exact_accuracy": 0.0,
+      "n_scored": 34,
+      "n_unparseable": 26,
+      "n_total": 60
+    }
+  },
+  "approx_overall_accuracy": 0.5023474178403756,
+  "date": "2026-09-17T09:52:36.357491+00:00"
+}
