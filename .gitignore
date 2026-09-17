@@ -37,6 +37,10 @@ ipynb_checkpoints/
 *.log
 scripts/.logs/
 
+# Evaluation run output (raw JSONL) — regeneratable via evaluation/runners/;
+# evaluation/results/SUMMARY.md itself IS committed as recorded evidence.
+evaluation/results/*.jsonl
+
 # IDE
 .vscode/
 .idea/

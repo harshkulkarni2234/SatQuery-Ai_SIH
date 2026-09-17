@@ -1,0 +1,7 @@
+# Separate from backend/requirements.txt per the plan (evaluation/ is a
+# standalone tool, not something the running backend imports). The runner
+# talks to a running SatQuery backend over HTTP (see runners/base.py) rather
+# than importing backend.app in-process, so this list stays short.
+numpy
+requests
+pytest
