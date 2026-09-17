@@ -16,6 +16,14 @@ from app.services.registry import _semantic_change_available, _vqa_worker_availa
 
 os.makedirs(MASK_DIR, exist_ok=True)
 
+# Phase C9: the repo-root data/ directory (demo scenarios + manifest.json)
+# is static, source-controlled, non-sensitive content — distinct from
+# backend/data/ (uploaded_images/change_masks, real user data, never
+# exposed this way). Served read-only so the frontend's "Load demo
+# scenario" feature can fetch the real demo files and upload them through
+# the normal POST /images/upload path, same as any user-selected file.
+DEMO_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+
 app = FastAPI(title="SatQuery AI", version="0.1.0")
 
 app.include_router(images_router)
@@ -24,6 +32,8 @@ app.include_router(specialists_router)
 app.include_router(report_router)
 
 app.mount("/masks", StaticFiles(directory=MASK_DIR), name="masks")
+if os.path.isdir(DEMO_DATA_DIR):
+    app.mount("/demo-assets", StaticFiles(directory=DEMO_DATA_DIR), name="demo-assets")
 
 
 # Phase A8: catch-all so an unhandled exception (e.g. DB down mid-request)

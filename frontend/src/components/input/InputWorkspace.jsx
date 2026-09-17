@@ -4,6 +4,7 @@ import { SCENARIOS, imageCombo } from "../../constants/scenarios.js";
 import { pairSummary } from "../../lib/format.js";
 import ImageCard from "./ImageCard.jsx";
 import ErrorPanel from "../common/ErrorPanel.jsx";
+import DemoScenarioPicker from "./DemoScenarioPicker.jsx";
 
 const MAX_IMAGES = 2;
 
@@ -42,6 +43,7 @@ export default function InputWorkspace({
   onAnalyze,
   error,
   errorDetail,
+  onLoadDemoScenario,
 }) {
   const fileRef = useRef(null);
   const pickFiles = () => fileRef.current && fileRef.current.click();
@@ -162,6 +164,8 @@ export default function InputWorkspace({
           ))}
         </div>
       </div>
+
+      {onLoadDemoScenario && <DemoScenarioPicker onLoad={onLoadDemoScenario} />}
     </div>
   );
 }

@@ -93,6 +93,42 @@ export default function App() {
     setImages((prev) => prev.filter((it) => it.key !== key));
   }
 
+  // Phase C9: fetches the real demo files (served by the backend at
+  // /demo-assets/..., see main.py) and uploads them through the exact same
+  // uploadItem() -> POST /images/upload path as a user-picked file — no
+  // pre-baked results, the specialist genuinely runs on these bytes.
+  async function loadDemoScenario(item) {
+    setError(null);
+    setErrorDetail(null);
+    setImages([]);
+    setQueryText(item.query);
+
+    const newItems = [];
+    for (const f of item.files) {
+      const resp = await fetch(f.url);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch demo file ${f.filename} (HTTP ${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const file = new File([blob], f.filename, { type: blob.type });
+      newItems.push({
+        key: `${f.filename}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        file,
+        url: URL.createObjectURL(file),
+        modality: f.modality,
+        captureDate: f.captureDate,
+        imageId: null,
+        uploading: false,
+        uploadError: null,
+        metadata: null,
+      });
+    }
+    setImages(newItems);
+    for (const it of newItems) {
+      uploadItem(it.key, it.file, it.modality, it.captureDate);
+    }
+  }
+
   async function handleAnalyze() {
     setError(null);
     setErrorDetail(null);
@@ -162,6 +198,7 @@ export default function App() {
             onAnalyze={handleAnalyze}
             error={error}
             errorDetail={errorDetail}
+            onLoadDemoScenario={loadDemoScenario}
           />
         )}
         {view === "waiting" && <AgentSelection key="waiting" />}
