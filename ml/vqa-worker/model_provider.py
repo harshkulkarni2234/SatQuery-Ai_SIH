@@ -58,6 +58,28 @@ def clean_gen(text):
     return text
 
 
+def _read_specialist_version(adapter_dir):
+    """Phase B2 item 5: read the version string from the adapter's own
+    version.json (which points at ml/adaptation/MODEL_CARD.md) rather than
+    hardcoding it in worker code, so a retrained/replaced adapter directory
+    carries its own version with it. Falls back to the original hardcoded
+    display string if no version.json exists (e.g. a bare/legacy adapter
+    dir) — never raises."""
+    import json
+
+    version_path = os.path.join(adapter_dir, "version.json")
+    if os.path.isfile(version_path):
+        try:
+            with open(version_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            version = data.get("version")
+            if version:
+                return version
+        except Exception:
+            pass
+    return MODEL_VERSION_SPECIALIST
+
+
 def _read_lora_config(adapter_dir):
     """Rebuild the LoRA tuning from the adapter's own config so shapes always match."""
     import json
@@ -80,19 +102,31 @@ class SmolVLMProvider:
     def __init__(self, model_dir=None, adapter_dir=None):
         self.model_dir = model_dir or os.getenv("MODEL_DIR") or BASE_MODEL_REPO
         self.adapter_dir = adapter_dir or os.getenv("ADAPTER_DIR") or DEFAULT_ADAPTER_DIR
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Phase B2/B8 GPU re-check: this previously only ever detected CUDA,
+        # so it silently fell back to CPU on Apple Silicon even though a
+        # real GPU (Apple M-series, via PyTorch's Metal/MPS backend) is
+        # available there. fp16 is intentionally NOT used on MPS — several
+        # fp16 attention/generation ops are still unreliable on that backend
+        # as of this torch version, so MPS runs in fp32 for correctness.
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.dtype = torch.float16 if self.device == "cuda" else torch.float32
         self.model = None
         self.processor = None
         self.specialist_available = False
         self.specialist_errors = []
+        self.specialist_version = MODEL_VERSION_SPECIALIST
 
     def load(self):
         t0 = time.time()
         kwargs = {"attn_implementation": "sdpa"}
-        if self.device == "cuda":
+        if self.device in ("cuda", "mps"):
             self.model = Idefics3ForConditionalGeneration.from_pretrained(
-                self.model_dir, dtype=self.dtype, device_map={"": "cuda"}, **kwargs
+                self.model_dir, dtype=self.dtype, device_map={"": self.device}, **kwargs
             )
         else:
             from accelerate import dispatch_model
@@ -121,6 +155,7 @@ class SmolVLMProvider:
             try:
                 peft_lm.load_adapter(self.adapter_dir, adapter_name="default")
                 self.specialist_available = True
+                self.specialist_version = _read_specialist_version(self.adapter_dir)
             except Exception as exc:  # worker must still operate in base mode
                 self.specialist_errors.append(str(exc))
                 self.specialist_available = False
@@ -163,21 +198,30 @@ class SmolVLMProvider:
                 with torch.no_grad():
                     answer = self._generate(query_text, image, max_new_tokens)
                 specialist_used = True
-                model_version = MODEL_VERSION_SPECIALIST
-            except Exception:
+                model_version = self.specialist_version
+                reason = "specialist requested and available; ran successfully"
+            except Exception as exc:
                 # graceful fallback to the base model
                 with torch.no_grad(), self.model.model.text_model.disable_adapter():
                     answer = self._generate(query_text, image, max_new_tokens)
                 model_version = MODEL_VERSION_BASE
                 specialist_used = False
+                reason = f"specialist requested but failed at inference ({type(exc).__name__}); used base"
+        elif use_specialist and not self.specialist_available:
+            with torch.no_grad(), self.model.model.text_model.disable_adapter():
+                answer = self._generate(query_text, image, max_new_tokens)
+            reason = "specialist requested but not available (failed to load); used base"
         else:
             with torch.no_grad(), self.model.model.text_model.disable_adapter():
                 answer = self._generate(query_text, image, max_new_tokens)
+            reason = "base mode (not requested for this question)"
 
         return {
             "answer_text": answer,
             "model_version": model_version,
             "specialist": specialist_used,
+            "adapter_used": specialist_used,
+            "reason": reason,
             "confidence_score": None,
             "execution_time_ms": int((time.time() - t0) * 1000),
         }

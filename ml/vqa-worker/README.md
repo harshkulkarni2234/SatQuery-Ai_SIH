@@ -23,14 +23,18 @@ venv\Scripts\activate
 ```
 
 ## 4. Install requirements
-```powershell
-# CUDA GPU workers (the tested build) first install the CUDA torch wheel:
+```bash
+# CUDA GPU (the original tested build) first installs the CUDA torch wheel:
 pip install torch==2.14.0+cu130 --index-url https://download.pytorch.org/whl/cu130
-# then the rest (pinned to the versions verified in Phase 7C Stage 3):
+# Apple Silicon (M-series): the standard torch wheel already includes MPS
+# (Metal) GPU support — no special index needed:
+pip install torch
+# then the rest (mostly pinned to the versions verified in Phase 7C Stage 3 —
+# numpy's pin was fixed during Phase B2's macOS/MPS setup, see the file):
 pip install -r requirements.vqa-worker.txt
 ```
-CPU-only machines: install the regular CPU `torch` wheel instead of the `+cu130`
-build.
+No GPU at all (neither CUDA nor Apple Silicon): install the regular CPU
+`torch` wheel — the worker still runs, just far slower (see section 10).
 
 ## 5. Start the worker
 ```powershell
@@ -80,8 +84,17 @@ model, and any specialist failure falls back to the base model. It is adapted
 BigEarthNet satellite data only — do not treat it as a general model.
 
 ## 10. GPU requirement / limitations
-- Needs a CUDA GPU for reasonable latency (fp16, ~4 GB VRAM with the T600 used in
-  development). On CPU it technically runs but is far slower.
+- Needs a real GPU for reasonable latency: either a CUDA GPU (fp16, ~4 GB VRAM
+  with the T600 used in the original Windows development) **or** Apple Silicon
+  via PyTorch's MPS (Metal) backend, verified working on an Apple M2 (fp32 —
+  MPS is intentionally not used with fp16, several attention/generation ops
+  are still unreliable there as of this torch version). `model_provider.py`
+  auto-detects CUDA, then MPS, then falls back to CPU. On CPU it technically
+  runs but is far slower.
+- Real, measured latency on the verified Apple M2 (MPS, fp32, first request
+  after model load): ~9.6s base model / ~4s LoRA specialist (short answers
+  finish faster). Not benchmarked against the original CUDA target machine in
+  this build.
 - Requests are processed **serially** (single inference slot) — no parallelism.
 - No retraining, no downloads at request time, and this service will NOT fetch
   GeoChat or any other model.
