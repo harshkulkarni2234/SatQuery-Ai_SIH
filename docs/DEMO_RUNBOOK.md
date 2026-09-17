@@ -31,8 +31,11 @@ hide.
    ```
    (Windows: `.\run_worker.ps1` does the equivalent, using its own isolated
    `ml/vqa-worker/venv` — see `ml/vqa-worker/README.md`.)
-   Re-check `/health` — `vqa_worker` should flip to `"up"` within a couple
-   of seconds once the model finishes loading.
+   Re-check the backend's `/health` — `vqa_worker` should flip to `"up"`
+   within a couple of seconds once the model finishes loading. The
+   worker's own `http://127.0.0.1:8001/health` reports which device it
+   loaded onto — verified for real on this dev machine as `"device":
+   "mps"` (Apple M2 GPU), not `"cpu"` — see `ml/vqa-worker/README.md`.
 4. **Frontend** (from `frontend/`):
    ```bash
    npm run dev
@@ -112,9 +115,12 @@ or 500s (see `docs/HARDENING_REPORT.md`). To demonstrate this live:
 4. Restart the worker afterward if you need VQA again for later scenarios.
 
 For **change detection**, the deterministic CV path has no external worker
-dependency (no GPU model exists yet — see `docs/SOLO_PROGRESS.md`, phase
-B8), so it has no equivalent "worker down" failure mode to demonstrate; its
-honest-limitation moment is the "spatial correspondence could not be
+dependency — a real pretrained semantic change model (TinyCD) was
+researched and was ready to integrate on this machine's GPU, but was
+deliberately not integrated (license + scope reasons, see
+`docs/SOLO_PROGRESS.md` phase B8 and `ml/change_model/SELECTION.md`), so
+there's no "worker down" failure mode to demonstrate for this specialist;
+its honest-limitation moment is the "spatial correspondence could not be
 verified" refusal already covered above when a non-georeferenced pair is
 used for change detection instead of scenario B's real GeoTIFFs.
 
@@ -148,14 +154,30 @@ summary with the specific step that failed if something's wrong.
 
 ## 7. Known, deliberate scope limits (say these plainly if asked)
 
-- No GPU on the development machine — the semantic (learned-model) change
-  detection specialist (Phase B8) and the full BigEarthNet LoRA fine-tuning
-  run (Phase B2) were not completed; `change.deterministic_cv` is always
-  the specialist that actually runs today, and the system reports this
+- The semantic (learned-model) change-detection specialist (Phase B8) was
+  not integrated — **not a hardware limitation**. This machine's GPU
+  (Apple M2, via PyTorch MPS) was verified working for real model
+  inference (the VQA worker actually runs SmolVLM on it). Three real
+  pretrained change-detection models were researched (TinyCD, BIT_CD,
+  ChangeFormer — see `ml/change_model/SELECTION.md`); TinyCD was ready to
+  integrate (2.4MB weights, runs fine on this GPU) but was deliberately
+  skipped because its license is non-commercial/research-only and none of
+  the three candidates output true semantic class labels anyway (all are
+  binary change/no-change). `change.deterministic_cv` is always the
+  specialist that actually runs today, and the system reports this
   honestly via `used_fallback` rather than pretending a semantic model
   exists.
+- The BigEarthNet LoRA fine-tuning run (Phase B2) is incomplete because
+  no labeled BigEarthNet training data exists in this build (`testing/`
+  has zero label files) — also not a GPU limitation. What IS real: the
+  existing Stage-3 adapter was verified to load and run correctly on this
+  GPU (previously untested), and a real base-vs-specialist comparison was
+  recorded — see `ml/adaptation/MODEL_CARD.md`.
 - Full evaluation-scale benchmark runs against RSVQA/CDVQA/VRSBench
-  (Phases B3–B6, B10) were not completed — see `docs/SOLO_PROGRESS.md` for
-  the exact scope decision. `docs/EVALUATION.md` does not exist for this
-  build; do not reference it or invent numbers.
+  (Phases B3–B6, B10) were not completed — by explicit direction to use
+  the local `testing/` folder instead, which itself has no labels to
+  score accuracy against either. See `docs/SOLO_PROGRESS.md` and
+  `evaluation/README.md` for the exact scope decision and what a real,
+  unlabeled run against `testing/` actually produced. `docs/EVALUATION.md`
+  does not exist for this build; do not reference it or invent numbers.
 - Scenario A's single image has unconfirmed provenance (documented above).

@@ -47,7 +47,7 @@ Specialist registry (6 declared specialists; dispatch via app/services/registry_
   ├── vqa.smolvlm_base                    → local VQA worker (SmolVLM)         [app/services/vqa.py]
   ├── vqa.smolvlm_bigearthnet_lora_stage3 → experimental LoRA (worker-internal routing)
   ├── grounding.deterministic_cv          → deterministic OpenCV/NumPy         [app/services/grounding.py]
-  ├── change.semantic_model               → NOT IMPLEMENTED (always unavailable — no GPU; see Limitations)
+  ├── change.semantic_model               → NOT IMPLEMENTED (deliberately skipped after evaluating real options; see Limitations)
   ├── change.deterministic_cv             → deterministic OpenCV/NumPy + real geo-reprojection [app/services/change_detection.py]
   └── cross_modal.feature_fusion          → deterministic fusion + coregistration-aware confidence [app/services/cross_modal.py]
         ▼
@@ -66,21 +66,25 @@ The backend never imports `torch`; the heavy ML stack lives in a separate VQA wo
 - **Grounding** uses a deterministic computer-vision pipeline (OpenCV + NumPy): HSV thresholding, morphological cleaning, connected-component analysis.
 - **Change detection** uses real geographic reprojection (`rasterio.warp.reproject`) when both images are georeferenced, falling back to phase-correlation registration otherwise; reports real changed area in m² from actual pixel resolution (never estimated), and always states its real alignment method.
 - **Optical + SAR fusion** uses deterministic multimodal feature analysis (speckle-filtered SAR backscatter/VV-VH stats, optical colour/NDVI-NDWI stats where bands allow), with per-class (water/vegetation/built-up) attribution reported as `both`/`optical_only`/`sar_only`/`none` — never claims combined evidence unless both sensors actually produced a real signal. Pixel-level agreement confidence is only computed when `coregistration` is independently verified or assumed from real file metadata — never guessed.
-- **Semantic (learned-model) change detection** is a declared-but-unimplemented specialist (`change.semantic_model`): the registry always reports it honestly as unavailable rather than silently omitting it, since no GPU was available to train/host it (see Limitations).
+- **Semantic (learned-model) change detection** is a declared-but-unimplemented specialist (`change.semantic_model`): the registry always reports it honestly as unavailable rather than silently omitting it. Real candidates (TinyCD, BIT_CD, ChangeFormer) were researched and one (TinyCD) was ready to integrate — see `ml/change_model/SELECTION.md` — but integrating it was deliberately skipped (its license is non-commercial/research-only, and none of the three candidates produce true semantic class labels anyway, only binary change/no-change) rather than a hardware limitation. See Limitations.
 
 ## Scientific honesty
 
 - Deterministic computer-vision pipelines are **not** described as — and are not — a trained satellite foundation model. They are rule-based detectors.
 - The Stage-3 LoRA adapter is **experimental** and is **not** claimed to be universally better than the base model; it is applied only to narrow supported question types and falls back to the base model on failure.
-- A local **GeoChat feasibility study** (see `notebooks/geochat_feasibility_test.ipynb`) found the full GeoChat model unsuitable for the available 4 GB T600 GPU, which is why the system uses the much smaller SmolVLM base.
+- A local **GeoChat feasibility study** (see `notebooks/geochat_feasibility_test.ipynb`) found the full GeoChat model unsuitable for the original team's 4 GB T600 GPU, which is why the system uses the much smaller SmolVLM base. (That finding is about GeoChat's own size, not a claim that no GPU exists anywhere in this project — see Setup below.)
 
 ## Setup
 
-Prerequisites: Python 3.11+, Node.js 18+, PostgreSQL 14+. A CUDA GPU is
-recommended for the VQA worker (~4 GB VRAM) but **not required** — this
-build was developed and tested entirely on a GPU-less machine (macOS,
-CPU-only); the worker runs on CPU, just slower, and every deterministic
-specialist (grounding/change/cross-modal) has no GPU dependency at all.
+Prerequisites: Python 3.11+, Node.js 18+, PostgreSQL 14+. The VQA worker
+needs a real GPU for reasonable latency — either CUDA (~4 GB VRAM) or
+**Apple Silicon via PyTorch's MPS (Metal) backend**, verified working on
+this build's actual development machine (a GPU-less claim earlier in this
+project's own docs was wrong — it conflated "no CUDA" with "no GPU at
+all"; `model_provider.py` auto-detects CUDA, then MPS, then CPU). Without
+either, the worker still runs on CPU, just far slower; every deterministic
+specialist (grounding/change/cross-modal) has no GPU dependency at all
+regardless.
 
 Commands below are shown for both platforms; `scripts/start_all.sh` /
 `scripts/start_all.ps1` automate steps 1–3 together (see
@@ -228,9 +232,10 @@ you can also upload your own `.png` / `.jpg` / `.tif` files.
 Known limitations, stated honestly rather than hidden:
 
 - Change detection measures **pixel-level visual differences**, not semantic land-cover change (no autonomous "building constructed" claims). It never estimates changed area when pixel resolution is unknown.
-- No GPU was available during development (see `notebooks/geochat_feasibility_test.ipynb` for why the much smaller SmolVLM was chosen over GeoChat). As a direct consequence:
-  - **The semantic (learned-model) change-detection specialist (`change.semantic_model`) was never implemented** — the deterministic CV specialist always runs instead, and the registry reports this honestly via `used_fallback` rather than silently substituting one for the other.
-  - **The BigEarthNet LoRA fine-tuning run (Phase B2) and the full RSVQA/CDVQA/VRSBench benchmark evaluation (Phases B3–B6, B10) were not completed.** There is no `docs/EVALUATION.md` in this build — do not reference one or invent numbers; see `docs/SOLO_PROGRESS.md` for the exact scope decision and status of every phase.
+- This machine's GPU (Apple M2, via PyTorch's MPS backend) was verified working for real inference — the VQA worker runs the actual SmolVLM-256M-Instruct model and its experimental LoRA adapter on it, not CPU (see `ml/vqa-worker/README.md`). A GPU was never the blanket blocker earlier drafts of this README implied.
+  - **The semantic (learned-model) change-detection specialist (`change.semantic_model`) was never implemented** — not a hardware limitation. Real candidates were researched (TinyCD, BIT_CD, ChangeFormer — see `ml/change_model/SELECTION.md`); TinyCD was ready to integrate (tiny weights, runs fine on this GPU) but was deliberately not integrated because its license is non-commercial/research-only and none of the three candidates produce true semantic class labels anyway (all three are binary change/no-change only). The deterministic CV specialist always runs instead, and the registry reports this honestly via `used_fallback` rather than silently substituting one for the other.
+  - **The BigEarthNet LoRA fine-tuning run (Phase B2) is still incomplete, but not for a GPU reason either** — `prepare_bigearthnet_vqa.py` needs real BigEarthNet land-cover labels to build a training set, and none exist in this build's data (`testing/` has zero label files of any kind). What IS real: the existing Stage-3 adapter was verified to load and run inference correctly on this GPU for the first time in this build (previously untested), and a real base-vs-specialist comparison was run and recorded — see `ml/adaptation/MODEL_CARD.md`.
+  - **The full RSVQA/CDVQA/VRSBench benchmark evaluation (Phases B3–B6, B10) was not completed** — by the user's own explicit direction to use the local `testing/` folder instead of downloading those datasets, and that folder has no labels to score accuracy against either. There is no `docs/EVALUATION.md` in this build — do not reference one or invent numbers; see `docs/SOLO_PROGRESS.md` for the exact scope decision and status of every phase, and `evaluation/README.md` for what a real (unlabeled, non-benchmark) run against `testing/` actually produced.
 - Optical ↔ SAR **spatial correspondence is never claimed** unless verified from real file metadata (matching CRS + transform); the cross-modal result reports per-sensor/per-class attribution and states honestly when correspondence is unverified, even for a pair that is genuinely co-registered by construction but ships without embedded georeferencing (see `data/demo/scenario_C_optical_sar/README.md`).
 - Display-region caps are enforced for readability (up to 10 grounding boxes; up to 8 per-sensor cross-modal regions).
 - Confidence is reported only when meaningful (e.g. bounding-box fill ratio, or pixel-mask agreement under verified coregistration); otherwise it is shown as **unavailable**.
@@ -298,9 +303,11 @@ This was built solo against a plan originally scoped for 3 parallel
 contributors (Person A: backend/geospatial, Person B: ML/eval, Person C:
 frontend/report/demo) — see `docs/satquery-master-build-spec.md` for the
 original plan and `docs/SOLO_PROGRESS.md` for exactly which phases are
-done, deferred, or blocked, and the real reason for each (mainly: no GPU on
-the development machine, and large third-party dataset downloads not yet
-authorized). Nothing above claims work that file doesn't corroborate.
+done, deferred, or blocked, and the real reason for each (missing labeled
+training/benchmark data in most cases, one deliberate license-driven scope
+call for the change-detection specialist — not a GPU limitation; this
+machine's Apple M2 GPU was verified working via PyTorch's MPS backend).
+Nothing above claims work that file doesn't corroborate.
 
 ## License
 
