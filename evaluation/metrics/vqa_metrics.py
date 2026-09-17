@@ -189,6 +189,29 @@ def percentage_bucket_accuracy(predictions: list[str], ground_truths: list[str],
     }
 
 
+def contains_ground_truth_accuracy(predictions: list[str], ground_truths: list[str]) -> dict:
+    """Fraction of predictions whose normalized text contains the entire
+    normalized ground-truth phrase as a substring. For open-vocabulary
+    free-text answers (e.g. VRSBench's object color/position/category —
+    no small fixed answer set to build a categorical_accuracy vocabulary
+    from), a real, correct answer is often embedded in a longer sentence
+    ("The vehicles appear yellow in color" contains "yellow"), so plain
+    exact_match_accuracy would unfairly mark it wrong. Unlike the other
+    *_accuracy functions here, this has no 'unparseable' bucket — every
+    prediction is scored, since there's always something to check a
+    substring against (an empty ground truth would be a data problem, not
+    a parsing one)."""
+    if not predictions:
+        raise ValueError("contains_ground_truth_accuracy: empty predictions")
+    if len(predictions) != len(ground_truths):
+        raise ValueError("predictions and ground_truths must be the same length")
+    correct = sum(
+        1 for p, g in zip(predictions, ground_truths)
+        if normalize_answer(g) in normalize_answer(p)
+    )
+    return {"accuracy": correct / len(predictions), "n_scored": len(predictions), "n_total": len(predictions)}
+
+
 def parse_count(text: str) -> Optional[float]:
     """Extract the first number found in free text. Returns None if no
     number is present rather than guessing 0."""

@@ -2,6 +2,7 @@ import pytest
 
 from evaluation.metrics.vqa_metrics import (
     categorical_accuracy,
+    contains_ground_truth_accuracy,
     count_accuracy_rmse,
     exact_match_accuracy,
     normalize_answer,
@@ -108,6 +109,16 @@ def test_percentage_bucket_accuracy_hand_computed():
     assert result["n_unparseable"] == 1
     assert result["n_scored"] == 2
     assert result["accuracy"] == 0.5  # 1st correct (0_to_10==0_to_10), 2nd wrong (90_to_100!=0_to_10)
+
+
+def test_contains_ground_truth_accuracy_hand_computed():
+    # real motivating case: a correct answer embedded in a full sentence
+    # must not be scored wrong just because it's not a literal equality
+    preds = ["The vehicles appear yellow in color.", "It is white.", "unrelated answer"]
+    gts = ["Yellow", "white", "red"]
+    result = contains_ground_truth_accuracy(preds, gts)
+    assert result["n_total"] == 3
+    assert result["accuracy"] == pytest.approx(2 / 3)
 
 
 def test_count_accuracy_rmse_hand_computed():

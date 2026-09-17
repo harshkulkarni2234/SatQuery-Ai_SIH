@@ -63,6 +63,7 @@ class SampleResult:
     used_fallback: Optional[bool] = None
     warnings: list[str] = field(default_factory=list)
     answer_text: Optional[str] = None
+    bounding_boxes: Optional[list] = None
     latency_ms: Optional[int] = None
     error: Optional[str] = None
     meta: dict = field(default_factory=dict)
@@ -155,6 +156,7 @@ def run_evaluation(samples: Iterable[dict], config: RunConfig) -> list[SampleRes
                     body = resp.json()
                     result.task_classified = body.get("task_classified")
                     result.answer_text = body.get("answer_text")
+                    result.bounding_boxes = body.get("bounding_boxes")
                     result.confidence_score = body.get("confidence_score")
                     result.confidence_source = body.get("confidence_source")
                     result.used_fallback = body.get("used_fallback")
