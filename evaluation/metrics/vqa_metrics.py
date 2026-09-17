@@ -127,6 +127,68 @@ def yes_no_accuracy(predictions: list[str], ground_truths: list[bool]) -> dict:
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 
+def parse_percentage_bucket(text: str, buckets: list[str]) -> Optional[str]:
+    """Resolves free text to one of a list of bucket labels shaped like
+    "0_to_10", "90_to_100", or a bare "0" for a zero bucket (CDVQA's
+    change_ratio/change_ratio_types convention). Tries an exact keyword
+    match first (in case the prediction literally says a bucket label),
+    then falls back to extracting a bare percentage number and placing it
+    in the matching bucket — added after finding that a real, correct
+    answer like "approximately 5.6% of the frame changed" would otherwise
+    be marked unparseable forever, since "5.6" never literally appears as
+    the substring "0_to_10". Returns None if no percentage can be found
+    at all, or if it falls outside every bucket's range (never guesses)."""
+    keyword_match = parse_categorical(text, buckets)
+    if keyword_match is not None:
+        return keyword_match
+
+    match = _NUMBER_RE.search(text)
+    if match is None:
+        return None
+    value = float(match.group())
+
+    for bucket in buckets:
+        if bucket == "0":
+            if value == 0:
+                return bucket
+            continue
+        parts = bucket.split("_to_")
+        if len(parts) != 2:
+            continue
+        low, high = float(parts[0]), float(parts[1])
+        if low < value <= high or (low == 0 and value == 0):
+            return bucket
+    return None
+
+
+def percentage_bucket_accuracy(predictions: list[str], ground_truths: list[str], buckets: list[str]) -> dict:
+    """Accuracy over percentage-bucket questions, resolving free-text
+    percentages into their bucket before comparing (see
+    parse_percentage_bucket). Same unparseable/scored convention as the
+    other *_accuracy functions here."""
+    if not predictions:
+        raise ValueError("percentage_bucket_accuracy: empty predictions")
+    if len(predictions) != len(ground_truths):
+        raise ValueError("predictions and ground_truths must be the same length")
+    correct = 0
+    unparseable = 0
+    scored = 0
+    for pred, gt in zip(predictions, ground_truths):
+        parsed = parse_percentage_bucket(pred, buckets)
+        if parsed is None:
+            unparseable += 1
+            continue
+        scored += 1
+        if parsed == normalize_answer(gt):
+            correct += 1
+    return {
+        "accuracy": (correct / scored) if scored else None,
+        "n_scored": scored,
+        "n_unparseable": unparseable,
+        "n_total": len(predictions),
+    }
+
+
 def parse_count(text: str) -> Optional[float]:
     """Extract the first number found in free text. Returns None if no
     number is present rather than guessing 0."""

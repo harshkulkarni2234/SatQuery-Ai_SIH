@@ -46,6 +46,9 @@ evaluation/results/*.jsonl
 # committed, same size-based reasoning as testing/.
 evaluation/rsvqa_lr/raw/
 evaluation/levir_cd/raw/
+evaluation/cdvqa/raw/
+evaluation/second_dataset/raw/
+evaluation/vrsbench/raw/
 
 # IDE
 .vscode/

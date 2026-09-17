@@ -7,9 +7,16 @@ from evaluation.metrics.vqa_metrics import (
     normalize_answer,
     parse_categorical,
     parse_count,
+    parse_percentage_bucket,
     parse_yes_no,
+    percentage_bucket_accuracy,
     yes_no_accuracy,
 )
+
+_PCT_BUCKETS = [
+    "0", "0_to_10", "10_to_20", "20_to_30", "30_to_40", "40_to_50",
+    "50_to_60", "60_to_70", "70_to_80", "80_to_90", "90_to_100",
+]
 
 
 def test_normalize_answer_strips_punctuation_and_case():
@@ -77,6 +84,30 @@ def test_categorical_accuracy_hand_computed():
     assert result["n_unparseable"] == 1
     assert result["n_scored"] == 2
     assert result["accuracy"] == 0.5  # 1st correct (urban==urban), 2nd wrong (rural!=urban)
+
+
+def test_parse_percentage_bucket_extracts_real_percentage():
+    # real bug this catches: "approximately 5.6% ... changed" must resolve
+    # to bucket "0_to_10", not be marked unparseable just because the
+    # literal substring "0_to_10" never appears in the text
+    assert parse_percentage_bucket("approximately 5.6% of the frame changed", _PCT_BUCKETS) == "0_to_10"
+    assert parse_percentage_bucket("about 95 percent changed", _PCT_BUCKETS) == "90_to_100"
+    assert parse_percentage_bucket("0% changed", _PCT_BUCKETS) == "0"
+    assert parse_percentage_bucket("no number here at all", _PCT_BUCKETS) is None
+
+
+def test_parse_percentage_bucket_literal_keyword_still_works():
+    assert parse_percentage_bucket("the bucket is 0_to_10", _PCT_BUCKETS) == "0_to_10"
+
+
+def test_percentage_bucket_accuracy_hand_computed():
+    preds = ["approximately 5.6% changed", "about 95 percent changed", "no idea"]
+    gts = ["0_to_10", "0_to_10", "50_to_60"]
+    result = percentage_bucket_accuracy(preds, gts, _PCT_BUCKETS)
+    assert result["n_total"] == 3
+    assert result["n_unparseable"] == 1
+    assert result["n_scored"] == 2
+    assert result["accuracy"] == 0.5  # 1st correct (0_to_10==0_to_10), 2nd wrong (90_to_100!=0_to_10)
 
 
 def test_count_accuracy_rmse_hand_computed():
