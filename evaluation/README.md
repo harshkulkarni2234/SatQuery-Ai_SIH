@@ -13,15 +13,13 @@ folder instead (see the "Unlabeled smoke test" section below — that
 folder genuinely has zero label files, so it can only produce
 routing/latency statistics, never accuracy).
 
-**That has since changed for RSVQA.** The real, official SIH26167 problem
-statement explicitly names RSVQA, VRSBench, and CDVQA as the prescribed
-public benchmarks — so fetching them is no longer a workaround, it's
-literally what's asked for. RSVQA-LR was fetched (with explicit
-permission) and run for real — see "Real labeled benchmark: RSVQA-LR"
-below for actual, computed accuracy numbers, not routing statistics.
-CDVQA/VRSBench are pending the same explicit-permission step (CDVQA's
-underlying images come from the SECOND dataset, a ~3.79GB Google-Drive-only
-download with an unstated license — flagged separately before fetching).
+**That has since changed for all three.** The real, official SIH26167
+problem statement explicitly names RSVQA, VRSBench, and CDVQA as the
+prescribed public benchmarks — so fetching them was no longer a
+workaround, it's literally what's asked for. All three were fetched
+(with explicit permission at each step, real sizes/licenses disclosed
+first) and run for real against the live system — see the sections
+below for actual, computed numbers, not routing statistics.
 
 ## Real labeled benchmark: RSVQA-LR
 
@@ -147,24 +145,97 @@ test's own comment, and `categorical_accuracy` has a regression test
 reproducing the exact free-text-matching bug found while scoring the
 real RSVQA-LR run (see above).
 
-## CDVQA and VRSBench (pending)
+## Real labeled benchmark: CDVQA (bi-temporal change-VQA)
 
-Both are named in the official problem statement. CDVQA's question/answer
-labels are clean (official GitHub repo, Apache-2.0, no download friction),
-but its images come from the SECOND dataset — Google-Drive-only, ~3.79GB,
-license entirely unstated on the official page. VRSBench hasn't been
-researched yet. Neither is fetched in this build as of this writing;
-follow the same pattern as `rsvqa_lr_adapter.py`/`run_rsvqa_lr_eval.py`
-once permission is given and the raw data is in hand:
+**Source**: official GitHub repo [YZHJessica/CDVQA](https://github.com/YZHJessica/CDVQA)
+(Apache-2.0 labels) over images from the **SECOND** dataset
+([captain-whu.github.io/SCD](https://captain-whu.github.io/SCD/), license
+unstated on the official page — fetched with explicit user go-ahead after
+disclosing the real ~3.79GB size and that caveat). See
+`evaluation/cdvqa/README.md` and `evaluation/second_dataset/README.md` for
+exact download commands (including a real gotcha hit during this fetch:
+Google Drive's large-file bypass silently truncated the download once
+mid-transfer with no error — verify with `unzip -t`, don't trust the
+reported size alone).
 
-1. Get explicit permission for the download (per this project's process
-   — flag exact size and license before fetching, same as every other
-   external dataset in this build).
-2. Write a new adapter under `runners/` following `rsvqa_lr_adapter.py`'s
-   shape (real ground truth in `meta`, documented stratified sampling if
-   the full set is too slow to run serially).
-3. Write a benchmark-specific scorer following `score_rsvqa_lr.py`'s
-   shape, calling the appropriate function in `metrics/` — grounding
-   uses `spatial_metrics.grounding_acc_at_iou`, captioning would need
-   `text_metrics.bleu_n`/`rouge_l` (implemented, unit-tested, never yet
-   run against real labeled captions).
+Real result (`evaluation/results/cdvqa_score.json`, 120 real bi-temporal
+queries, 19 errors — see below), seeded stratified sample (15/type):
+
+| Question type | Accuracy | What actually happened |
+|---|---|---|
+| change_or_not / increase_or_not / decrease_or_not | **0% scored (all unparseable)** | SatQuery's `change.deterministic_cv` answer is always a descriptive sentence about coverage % and location — it never states a literal "yes"/"no", so these three types couldn't be scored at all. Not a metric bug (verified by reading the raw answers) — a real capability gap: the specialist has no per-class change/no-change verdict. |
+| smallest_change / largest_change / change_to_what | **0% scored (all unparseable)** | Same root cause as B8's whole rationale: no per-land-cover-class semantic understanding, only aggregate change measurement. Expected, stated up front in `cdvqa/README.md` before this run. |
+| change_ratio | **14.3%** (7/13 scored) | The one place our system's real stated percentage could be extracted and bucketed — see the `percentage_bucket_accuracy` fix above. |
+| change_ratio_types | **37.5%** (8/15 scored) | Same mechanism, best-performing category. |
+
+19/120 samples errored with `"Two images supplied without a change-related
+question"` — some of CDVQA's real question phrasings don't trigger
+SatQuery's keyword-based change-detection routing at all, a second real
+routing gap alongside the semantic one.
+
+## Real labeled benchmark: VRSBench (VQA, referring/grounding, captioning)
+
+**Source**: official HuggingFace dataset
+[xiang709/VRSBench](https://huggingface.co/datasets/xiang709/VRSBench),
+**CC-BY-4.0** (clean, verified via the HF API). See
+`evaluation/vrsbench/README.md`.
+
+### VQA (`evaluation/results/vrsbench_vqa_score.json`, 180 real samples, seeded 15/type)
+
+| Type | Accuracy | Metric |
+|---|---|---|
+| object existence | **86.7%** | yes/no |
+| object color | 46.7% | contains-ground-truth |
+| reasoning | 46.7% | contains-ground-truth |
+| object quantity | 45.5% exact (11/15 scored), RMSE 1.41 | count |
+| rural or urban | 60.0% | contains-ground-truth |
+| object position | 45.5% | contains-ground-truth |
+| object size | 36.4% | contains-ground-truth |
+| scene type | 33.3% | contains-ground-truth |
+| object category | 13.3% | contains-ground-truth |
+| object shape | 13.3% | contains-ground-truth |
+| image | 13.3% | contains-ground-truth |
+| object direction | **6.7%** | contains-ground-truth |
+
+A real bug was caught and fixed running this: VRSBench's ground truth
+mixes digit ("3") and spelled-out ("Three", "Single") number forms for
+the same "object quantity" type — a bare `float()` call crashed the
+whole scoring run. `parse_count` (`metrics/vqa_metrics.py`) now handles
+both forms, with a regression test reproducing the exact crash.
+
+### Referring/grounding (`evaluation/results/vrsbench_referring_score.json`, 51 real samples)
+
+**0 out of 51 samples ever reached the GROUNDING specialist — 100%
+misrouted to VQA.** This was verified live (a real referring expression
+sent through the actual running backend) *before* the scorer was even
+written, not discovered after the fact: SatQuery's grounding specialist
+supports exactly 5 land-cover targets (water/vegetation/built-up/roads/
+farmland); VRSBench's 26 real object classes (vehicle, ship, airplane,
+harbor, tennis-court, ...) have zero vocabulary overlap. No IoU number is
+reported as a headline result — reporting one would misrepresent a task
+that was never actually attempted.
+
+### Captioning (`evaluation/results/vrsbench_captioning_score.json`, 30 real samples)
+
+| Metric | Score |
+|---|---|
+| BLEU-1 | 9.8% |
+| BLEU-4 | 0.2% |
+| ROUGE-L F1 | 12.2% |
+
+The one VRSBench task with no ontology mismatch (reuses the ordinary
+description-style VQA path) — low but real scores, consistent with
+MODEL_CARD.md's earlier finding that the 256M-param base model visibly
+struggles on remote-sensing imagery without fine-tuning.
+
+## What all five real evaluations add up to
+
+Across RSVQA-LR, CDVQA, and VRSBench's three tasks, a consistent, honest
+picture: **single-image VQA works, with real but modest accuracy on an
+untrained base model** (presence/existence in the 70-87% range, most
+open-vocabulary attributes in the 10-50% range); **grounding only covers
+5 land-cover targets and cannot attempt object-level referring at all**;
+**change detection can state an aggregate percentage but has no semantic
+or per-class understanding**. None of this is smoothed over — it's the
+real, current baseline this build measured, ready to compare against
+once real fine-tuning (BigEarthNet LoRA) happens.

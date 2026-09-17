@@ -212,13 +212,31 @@ def contains_ground_truth_accuracy(predictions: list[str], ground_truths: list[s
     return {"accuracy": correct / len(predictions), "n_scored": len(predictions), "n_total": len(predictions)}
 
 
+_WORD_NUMBERS = {
+    "none": 0, "zero": 0, "single": 1, "one": 1, "two": 2, "couple": 2,
+    "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+    "eighteen": 18, "nineteen": 19, "twenty": 20,
+}
+
+
 def parse_count(text: str) -> Optional[float]:
-    """Extract the first number found in free text. Returns None if no
-    number is present rather than guessing 0."""
+    """Extract the first number found in free text — as a digit ("3") or
+    a spelled-out word ("Three", "Single") — added after a real crash:
+    VRSBench's ground truth mixes both forms for the same question type
+    ('3' and 'Three' both appear for "object quantity"), and a bare
+    regex-only version raised ValueError on the word form instead of
+    returning a clean None. Returns None if neither form is present
+    rather than guessing 0."""
     match = _NUMBER_RE.search(text)
-    if match is None:
-        return None
-    return float(match.group())
+    if match is not None:
+        return float(match.group())
+    normalized = normalize_answer(text)
+    for word in normalized.split():
+        if word in _WORD_NUMBERS:
+            return float(_WORD_NUMBERS[word])
+    return None
 
 
 def count_accuracy_rmse(predictions: list[str], ground_truths: list[float]) -> dict:

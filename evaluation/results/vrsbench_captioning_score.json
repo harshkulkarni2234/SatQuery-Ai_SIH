@@ -1,0 +1,12 @@
+{
+  "benchmark": "VRSBench captioning (real official eval split)",
+  "dataset": "https://huggingface.co/datasets/xiang709/VRSBench (CC-BY-4.0)",
+  "model": "vqa.smolvlm_base (description-style prompt, same as C9 demo scenario A)",
+  "n_total_rows": 30,
+  "n_errors": 0,
+  "n_scored": 30,
+  "bleu1_mean": 0.09774610538578077,
+  "bleu4_mean": 0.002096993975554082,
+  "rouge_l_f1_mean": 0.12220430839482539,
+  "date": "2026-09-17T18:09:38.528577+00:00"
+}

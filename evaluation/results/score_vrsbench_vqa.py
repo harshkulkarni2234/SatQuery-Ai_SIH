@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from evaluation.metrics.vqa_metrics import (
     contains_ground_truth_accuracy,
     count_accuracy_rmse,
+    parse_count,
     yes_no_accuracy,
     parse_yes_no,
 )
@@ -57,9 +58,20 @@ def score(path: str) -> dict:
         preds = [r["answer_text"] for r in items]
         gts = [r["meta"]["ground_truth_answer"] for r in items]
         if qtype in NUMERIC_TYPES:
+            # Real bug found running this against the actual data: VRSBench's
+            # ground truth mixes digit ("3") and spelled-out ("Three", "Single")
+            # forms for the same question type — a bare float(g) crashed the
+            # whole run. Ground truth is parsed the same way predictions are
+            # (parse_count now handles both forms — see vqa_metrics.py) and any
+            # ground truth that still can't be parsed is excluded and reported,
+            # not silently coerced.
+            gt_parsed = [parse_count(g) for g in gts]
+            n_gt_unparseable = sum(1 for g in gt_parsed if g is None)
+            paired = [(p, g) for p, g in zip(preds, gt_parsed) if g is not None]
+            metric_result = count_accuracy_rmse([p for p, _ in paired], [g for _, g in paired]) if paired else None
             results[qtype] = {
                 "n": len(items), "metric": "count_accuracy_rmse",
-                **count_accuracy_rmse(preds, [float(g) for g in gts]),
+                "n_ground_truth_unparseable": n_gt_unparseable, **(metric_result or {}),
             }
         elif qtype in YES_NO_TYPES:
             gt_bools = [parse_yes_no(g) for g in gts]

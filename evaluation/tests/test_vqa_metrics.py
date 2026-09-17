@@ -66,6 +66,16 @@ def test_parse_count():
     assert parse_count("-2.5 change") == -2.5
 
 
+def test_parse_count_word_form():
+    # real crash this catches: VRSBench ground truth mixes '3' and 'Three'
+    # for the same question type — a digit-only parser raised ValueError
+    # (via a bare float()) instead of handling the word form
+    assert parse_count("Three") == 3.0
+    assert parse_count("Single") == 1.0
+    assert parse_count("There are three vehicles visible.") == 3.0
+    assert parse_count("no count word here") is None
+
+
 def test_parse_categorical_free_text():
     assert parse_categorical("It is an urban area.", ["urban", "rural"]) == "urban"
     assert parse_categorical("This looks rural to me", ["urban", "rural"]) == "rural"

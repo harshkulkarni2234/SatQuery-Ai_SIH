@@ -1,0 +1,17 @@
+{
+  "benchmark": "VRSBench referring/grounding (real official eval split)",
+  "dataset": "https://huggingface.co/datasets/xiang709/VRSBench (CC-BY-4.0)",
+  "model": "grounding.deterministic_cv (5 land-cover targets only \u2014 see note)",
+  "note": "SatQuery's grounding specialist supports water/vegetation/built-up/roads/farmland only. VRSBench's referring expressions ask about individual objects (vehicle, ship, airplane, harbor, ...) with zero vocabulary overlap. task_routing below is the real, measured finding: how often the query even reached GROUNDING at all (expected near-zero). iou_stats covers ONLY that subset, if any, and must not be read as 'VRSBench grounding accuracy' overall.",
+  "n_total_rows": 51,
+  "n_errors": 0,
+  "task_routing": {
+    "VQA": 51
+  },
+  "n_reached_grounding": 0,
+  "iou_stats": {
+    "n": 0,
+    "mean_iou": null
+  },
+  "date": "2026-09-17T18:04:44.024934+00:00"
+}

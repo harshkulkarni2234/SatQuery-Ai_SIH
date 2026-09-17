@@ -29,7 +29,11 @@ import random
 from typing import Iterator
 
 CDVQA_RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "cdvqa", "raw")
-SECOND_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "..", "second_dataset", "raw")
+# The public SECOND release ships as second_dataset.zip -> SECOND_train_set.rar
+# (2,968 real pairs; CDVQA's 968-pair test split is a subset of these) ->
+# SECOND_train_set/{im1,im2,label1,label2}/ once extracted — verified against
+# the real archive, not assumed.
+SECOND_IMAGES_DIR = os.path.join(os.path.dirname(__file__), "..", "second_dataset", "raw", "SECOND_train_set")
 
 DATASET_CITATION = (
     "CDVQA test split (Yuan et al. 2022, https://github.com/YZHJessica/CDVQA, "
