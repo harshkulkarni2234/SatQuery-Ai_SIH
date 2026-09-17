@@ -1,0 +1,47 @@
+# Reconstructed Stage-3 LoRA config (Phase B2).
+#
+# Fields under `lora:` come directly from the shipped
+# ml/smolvlm/lora_stage3/adapter_config.json — real, not guessed.
+# Fields under `training:` are UNKNOWN: the adapter's own README.md is an
+# unfilled Hugging Face PEFT template ("[More Information Needed]"
+# everywhere), and no training log, git history, or config file for the
+# original Stage 3 run exists anywhere in this repo. Per this project's
+# honesty rule, these are marked null/unknown explicitly rather than
+# invented — do not fill them in with a plausible-looking guess.
+#
+# ml/vqa-worker/README.md section 9 (written before this build, presumably
+# by whoever ran the original training) is the only narrative source that
+# survives: "trained on a small (~64-example) BigEarthNet slice... improved
+# some presence/count categories while captions regressed." That claim is
+# reproduced in MODEL_CARD.md as reported, not independently re-verified
+# against a training log (none exists to check it against).
+
+model:
+  base_model: HuggingFaceTB/SmolVLM-256M-Instruct
+  architecture_note: >
+    LoRA is applied to a CausalLM-facade wrapper (DecoderShim in
+    model_provider.py) over Idefics3's text decoder only — the vision
+    tower is untouched. See model_provider.py for why this shape is
+    required (PEFT needs a plain CausalLM-like forward()).
+
+lora:
+  r: 8
+  lora_alpha: 16
+  lora_dropout: 0.1
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  # source: ml/smolvlm/lora_stage3/adapter_config.json (verbatim)
+
+training:
+  dataset: unknown  # narrative claims "~64-example BigEarthNet slice" (see note above) — not verifiable
+  learning_rate: unknown
+  steps: unknown
+  batch_size: unknown
+  gradient_accumulation_steps: unknown
+  seed: unknown
+  precision: unknown  # adapter_config.json has no dtype field; base model card doesn't specify training precision
+  image_size: unknown
+  hardware: unknown  # "T600 ~4GB VRAM" is documented for INFERENCE (ml/vqa-worker/README.md) but not confirmed as the training GPU
+
+version_string: smolvlm256m-ben-lora-s3-v1.0

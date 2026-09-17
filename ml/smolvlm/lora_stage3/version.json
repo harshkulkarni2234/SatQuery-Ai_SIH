@@ -1,0 +1,5 @@
+{
+  "version": "smolvlm256m-ben-lora-s3-v1.0",
+  "model_card": "ml/adaptation/MODEL_CARD.md",
+  "note": "Read by model_provider.py at load time so the version string travels with the adapter directory rather than being hardcoded in worker code (Phase B2 item 5)."
+}

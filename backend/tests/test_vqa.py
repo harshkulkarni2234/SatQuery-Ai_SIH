@@ -14,6 +14,8 @@ def _base_success(*args, **kwargs):
         "answer_text": "There is a cloud-free terrain.",
         "model_version": "SmolVLM-256M-Instruct",
         "specialist": False,
+        "adapter_used": False,
+        "reason": "base mode (not requested for this question)",
         "confidence_score": None,
         "execution_time_ms": 33,
     })
@@ -22,8 +24,10 @@ def _base_success(*args, **kwargs):
 def _specialist_success(*args, **kwargs):
     return _make_response({
         "answer_text": "Yes.",
-        "model_version": "SmolVLM-256M + Stage3LoRA (exp)",
+        "model_version": "smolvlm256m-ben-lora-s3-v1.0",
         "specialist": True,
+        "adapter_used": True,
+        "reason": "specialist requested and available; ran successfully",
         "confidence_score": None,
         "execution_time_ms": 48,
     })
@@ -104,6 +108,8 @@ class TestVQAServicer:
         assert result["answer_text"]
         assert result["model_version"] == "SmolVLM-256M-Instruct"
         assert result["specialist"] is False
+        assert result["adapter_used"] is False
+        assert result["reason"] == "base mode (not requested for this question)"
         assert result["confidence_score"] is None
         assert result["error"] is False
         assert isinstance(result["execution_time_ms"], int)
@@ -114,7 +120,9 @@ class TestVQAServicer:
         monkeypatch.setattr(vqa_module, "_post", _specialist_success)
         result = vqa_module.answer_question(str(fake_img), "Is there a road?")
         assert result["specialist"] is True
-        assert "SmolVLM-256M + Stage3LoRA (exp)" in result["model_version"]
+        assert result["adapter_used"] is True
+        assert result["model_version"] == "smolvlm256m-ben-lora-s3-v1.0"
+        assert "specialist requested and available" in result["reason"]
         assert result["confidence_score"] is None
 
     def test_worker_offline(self, tmp_path, monkeypatch):
@@ -125,6 +133,8 @@ class TestVQAServicer:
         assert result["error"] is True
         assert "[VQA unavailable]" in result["answer_text"]
         assert result["model_version"] is None
+        assert result["adapter_used"] is False
+        assert "worker unavailable" in result["reason"]
         assert result["confidence_score"] is None
 
     def test_malformed_worker_response(self, tmp_path, monkeypatch):

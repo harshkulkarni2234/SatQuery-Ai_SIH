@@ -1,0 +1,125 @@
+{
+  "benchmark": "none (no labeled held-out split available \u2014 see module docstring)",
+  "split": "n/a",
+  "n": 8,
+  "metrics": {
+    "note": "NOT accuracy \u2014 no ground truth exists. These are real, measured base-vs-specialist agreement/activation statistics only.",
+    "specialist_activation_rate": 1.0,
+    "exact_agreement_rate": 0.0,
+    "by_question_type": {
+      "description": {
+        "n": 2,
+        "specialist_ran": 2,
+        "agree_exact_normalized": 0
+      },
+      "count": {
+        "n": 2,
+        "specialist_ran": 2,
+        "agree_exact_normalized": 0
+      },
+      "presence": {
+        "n": 4,
+        "specialist_ran": 4,
+        "agree_exact_normalized": 0
+      }
+    }
+  },
+  "config": "ml/adaptation/configs/stage3.yaml",
+  "git_commit": "46b622a89f8c8ff507a669f56ac52d36155e58ed",
+  "model_versions": {
+    "base": "SmolVLM-256M-Instruct",
+    "specialist": "smolvlm256m-ben-lora-s3-v1.0"
+  },
+  "dataset_hash": "460c2dc16543e345",
+  "date": "2026-09-17T03:20:18.964498+00:00",
+  "rows": [
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_65_03.png",
+      "prompt": "Is there water present in the image?",
+      "question_type": "presence",
+      "base_answer": "There is no water visible in the image; it only shows a blurred image of a person.",
+      "base_latency_ms": 3679,
+      "specialist_answer": "yes",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2841,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_65_03.png",
+      "prompt": "Is there vegetation in the image?",
+      "question_type": "presence",
+      "base_answer": "Yes, there is grass in the image.",
+      "base_latency_ms": 2946,
+      "specialist_answer": "yes",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2800,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_65_03.png",
+      "prompt": "How many buildings are visible?",
+      "question_type": "count",
+      "base_answer": "There are no buildings visible in the image; it only shows a green background with a white object.",
+      "base_latency_ms": 3173,
+      "specialist_answer": "1",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2877,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_65_03.png",
+      "prompt": "What can you tell me about this image?",
+      "question_type": "description",
+      "base_answer": "The image depicts a close-up view of a light-colored, possibly beige or light brown, surface with a slightly reflective surface. The surface appears to be made of a material that has a slightly reflective quality, possibly a material like glass or a polished metal. The surface is slightly raised and has a slight sheen, giving it a glossy appearance.\n\nThere are no visible objects or objects on the surface, and the lighting appears to be natural, possibly from a window or a light source that is not illuminated by the camera. The surface is slightly reflective, indicating that it is likely made of a material that has a high degree of transparency.\n\nThe surface is not perfectly smooth, but rather has a slightly rough texture. There are small, dark spots or blemishes on the surface, which could be reflections or other imperfections. These spots are not uniform in size and shape, but they are generally small and scattered.\n\nThe lighting in the image is soft and diffused, with no harsh shadows or highlights. The overall appearance of the surface is neutral and uncluttered, with no significant contrast or shadows.\n\nGiven the surface's reflective quality and the absence of any other objects, it is likely that this is a part of a larger",
+      "base_latency_ms": 8963,
+      "specialist_answer": "A high-resolution image of a green and blue gradient background.",
+      "specialist_ran": true,
+      "specialist_latency_ms": 3204,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_66_00.png",
+      "prompt": "Is there water present in the image?",
+      "question_type": "presence",
+      "base_answer": "There is no water visible in the image; it only shows a green color.",
+      "base_latency_ms": 3162,
+      "specialist_answer": "yes",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2821,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_66_00.png",
+      "prompt": "Is there vegetation in the image?",
+      "question_type": "presence",
+      "base_answer": "Yes, there is grass in the image.",
+      "base_latency_ms": 2978,
+      "specialist_answer": "yes",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2832,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_66_00.png",
+      "prompt": "How many buildings are visible?",
+      "question_type": "count",
+      "base_answer": "There are no buildings visible in the image; it only shows a green and blue color.",
+      "base_latency_ms": 3142,
+      "specialist_answer": "1",
+      "specialist_ran": true,
+      "specialist_latency_ms": 2879,
+      "agree_exact_normalized": false
+    },
+    {
+      "image": "S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_66_00.png",
+      "prompt": "What can you tell me about this image?",
+      "question_type": "description",
+      "base_answer": "The image depicts a close-up view of a metallic surface, likely made of metal or a similar material. The surface appears to be reflective, with a greenish hue, suggesting it might be a metallic or polished surface. The surface has a smooth, even texture, with no visible imperfections or irregularities.\n\nThere are no visible markings or markings on the surface, and the surface appears to be smooth and uniform. The lighting in the image is bright and even, with no harsh shadows or shadows cast by the surface.\n\nThe metallic surface has a shiny, reflective surface, which is characteristic of metallic materials. The surface is smooth and smooth, with no visible imperfections or irregularities. The surface appears to be smooth and even, with no visible flaws or imperfections.\n\nThere are no visible signs of wear or damage to the surface, such as scratches, scratches, or discoloration. The surface appears to be intact, with no signs of wear or damage.\n\nThe lighting in the image is bright and even, with no harsh shadows or shadows cast by the surface. The image is well-lit, with no shadows or highlights, and the surface appears to be in a bright, clear environment.\n\nGiven the reflective nature of the metallic surface, it is likely that",
+      "base_latency_ms": 8970,
+      "specialist_answer": "A photograph of a person wearing a white shirt with a blue and green pattern.",
+      "specialist_ran": true,
+      "specialist_latency_ms": 3349,
+      "agree_exact_normalized": false
+    }
+  ]
+}

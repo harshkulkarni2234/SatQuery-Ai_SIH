@@ -50,7 +50,12 @@ def run_vqa(image_path: str, query_text: str, grounding_target: str | None) -> S
 
     return SpecialistResult(
         answer=result["answer_text"],
-        evidence={"boxes": boxes, "visual_evidence": visual_evidence},
+        evidence={
+            "boxes": boxes,
+            "visual_evidence": visual_evidence,
+            "adapter_used": result.get("adapter_used", used_lora),
+            "specialist_selection_reason": result.get("reason"),
+        },
         confidence=result.get("confidence_score"),
         confidence_source="unavailable" if result.get("confidence_score") is None else "model-reported",
         model_or_tool=model_or_tool,
