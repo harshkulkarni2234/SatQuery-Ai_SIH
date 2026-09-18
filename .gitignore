@@ -80,3 +80,6 @@ outputs/
 *.ckpt
 models/
 checkpoints/
+trained/
+ml/adaptation/trained/
+ml/change_model/trained/
