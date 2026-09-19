@@ -24,6 +24,8 @@ from app.services import registry_adapters as adapters
 
 VQA_WORKER_URL = os.getenv("VQA_WORKER_URL", "http://127.0.0.1:8001").rstrip("/")
 VQA_HEALTH_TIMEOUT_S = 1.5
+CHANGE_WORKER_URL = os.getenv("CHANGE_WORKER_URL", "http://127.0.0.1:8002").rstrip("/")
+CHANGE_HEALTH_TIMEOUT_S = 1.5
 
 
 def _vqa_worker_available() -> bool:
@@ -34,16 +36,20 @@ def _vqa_worker_available() -> bool:
         return False
 
 
+def _change_worker_available() -> bool:
+    try:
+        resp = requests.get(f"{CHANGE_WORKER_URL}/health", timeout=CHANGE_HEALTH_TIMEOUT_S)
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def _always_available() -> bool:
     return True
 
 
 def _semantic_change_available() -> bool:
-    # No semantic change worker exists yet (Phase B8 not delivered).
-    # Kept as an explicit hook rather than deleting the entry so the
-    # registry/GET /specialists listing documents the planned model and
-    # A7 only needs to flip this check once B8 ships a real worker.
-    return False
+    return _change_worker_available()
 
 
 @dataclass(frozen=True)
@@ -119,18 +125,18 @@ _REGISTRY: list[RegistryEntry] = [
         spec=SpecialistSpec(
             id="change.semantic_model",
             task="CHANGE_DETECTION",
-            name="Semantic change model (planned — Phase B8)",
+            name="Siamese CNN semantic change model",
             kind="learned_model",
             input_count=2,
             modalities=["OPTICAL"],
             formats=["tif", "tiff", "png", "jpg", "jpeg", "bmp"],
             confidence_available=False,
-            version="unreleased",
+            version="siamese-cnn-v1",
             priority=5,
             is_fallback=False,
             is_rs_adapted=True,
         ),
-        handler=adapters.run_change_detection,  # unreachable while unavailable
+        handler=adapters.run_change_detection,
         is_available=_semantic_change_available,
     ),
     RegistryEntry(

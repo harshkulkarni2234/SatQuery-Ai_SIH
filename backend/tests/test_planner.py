@@ -45,7 +45,11 @@ def test_grounding_wrong_image_count_gets_suggestion():
     assert "1 image" in plan.suggestion
 
 
-def test_change_detection_plan_selects_deterministic_fallback():
+def test_change_detection_plan_selects_deterministic_fallback(monkeypatch):
+    """When the change worker is unavailable, the planner should
+    select the deterministic fallback."""
+    from app.services import registry
+    monkeypatch.setattr(registry, "_change_worker_available", lambda: False)
     result = planner.build_plan(
         "What changed between these two images?", [OPTICAL_A, OPTICAL_B]
     )

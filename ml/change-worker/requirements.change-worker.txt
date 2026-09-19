@@ -1,0 +1,16 @@
+# Change detection worker dependencies.
+# This environment is intentionally SEPARATE from the FastAPI backend venv
+# and from the vqa-worker venv.
+#
+# PIP INSTALL ORDER:
+#   1) pip install torch==2.14.0+cu130 --index-url https://download.pytorch.org/whl/cu130
+#      (GPU/CUDA build used in testing; on a CPU-only machine use the standard CPU wheel instead)
+#   2) pip install -r requirements.change-worker.txt
+#
+torch==2.14.0+cu130
+numpy==2.2.6
+pillow==12.3.0
+fastapi
+uvicorn[standard]
+python-multipart
+requests==2.34.2

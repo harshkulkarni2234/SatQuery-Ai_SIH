@@ -33,9 +33,10 @@ def test_select_grounding_returns_deterministic_cv():
     assert "grounding.deterministic_cv" in reason
 
 
-def test_select_change_detection_falls_back_to_deterministic():
-    """change.semantic_model is unavailable (Phase B8 not delivered) so
-    selection must fall back to the deterministic specialist with a reason."""
+def test_select_change_detection_falls_back_to_deterministic(monkeypatch):
+    """When change.semantic_model worker is unavailable, selection
+    must fall back to the deterministic specialist with a reason."""
+    monkeypatch.setattr(registry, "_change_worker_available", lambda: False)
     entry, reason, rejected = registry.select(
         "CHANGE_DETECTION", [{"modality": "OPTICAL"}, {"modality": "OPTICAL"}]
     )

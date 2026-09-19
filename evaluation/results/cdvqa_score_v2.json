@@ -1,0 +1,79 @@
+{
+  "benchmark": "CDVQA (real official test split, over SECOND dataset images)",
+  "dataset": "https://github.com/YZHJessica/CDVQA (Apache-2.0 labels) + https://captain-whu.github.io/SCD/ (images, license unstated)",
+  "model": "change.semantic_model (Siamese CNN, siamese-cnn-v1)",
+  "note": "SatQuery's change specialist measures aggregate pixel/area change, not per-land-cover-class semantic change. Low scores on categorical question types (smallest/largest/change_to_what) are an expected, honest capability gap, not a bug \u2014 exactly what a real semantic change model (Phase B8) would need to close.",
+  "n_total_rows": 120,
+  "n_errors": 19,
+  "by_question_type": {
+    "change_or_not": {
+      "n": 15,
+      "metric": "yes_no_accuracy",
+      "n_ground_truth_unparseable": 0,
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 15,
+      "n_total": 15
+    },
+    "increase_or_not": {
+      "n": 6,
+      "metric": "yes_no_accuracy",
+      "n_ground_truth_unparseable": 0,
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 6,
+      "n_total": 6
+    },
+    "decrease_or_not": {
+      "n": 7,
+      "metric": "yes_no_accuracy",
+      "n_ground_truth_unparseable": 0,
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 7,
+      "n_total": 7
+    },
+    "smallest_change": {
+      "n": 15,
+      "metric": "categorical_accuracy (6 land-cover classes)",
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 15,
+      "n_total": 15
+    },
+    "largest_change": {
+      "n": 15,
+      "metric": "categorical_accuracy (6 land-cover classes)",
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 15,
+      "n_total": 15
+    },
+    "change_to_what": {
+      "n": 15,
+      "metric": "categorical_accuracy (6 land-cover classes)",
+      "accuracy": null,
+      "n_scored": 0,
+      "n_unparseable": 15,
+      "n_total": 15
+    },
+    "change_ratio": {
+      "n": 13,
+      "metric": "percentage_bucket_accuracy (11 buckets, extracts a real % from free text)",
+      "accuracy": 0.3076923076923077,
+      "n_scored": 13,
+      "n_unparseable": 0,
+      "n_total": 13
+    },
+    "change_ratio_types": {
+      "n": 15,
+      "metric": "percentage_bucket_accuracy (11 buckets, extracts a real % from free text)",
+      "accuracy": 0.3333333333333333,
+      "n_scored": 15,
+      "n_unparseable": 0,
+      "n_total": 15
+    }
+  },
+  "approx_overall_accuracy": 0.32142857142857145,
+  "date": "2026-09-19T12:16:33.430537+00:00"
+}

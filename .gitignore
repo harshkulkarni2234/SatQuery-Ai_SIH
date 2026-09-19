@@ -87,3 +87,6 @@ ml/change_model/trained/
 # BigEarthNet adaptation build artifacts (checkpoints + raw downloads)
 ml/adaptation/resume/
 ml/adaptation/raw/
+
+# Change worker mask artifacts
+ml/change-worker/*.png

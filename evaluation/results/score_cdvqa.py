@@ -51,10 +51,15 @@ def score(path: str) -> dict:
     rows = _load(path)
     by_type = defaultdict(list)
     n_errors = 0
+    # Detect model from eval results
+    model_name = "change.deterministic_cv"
     for r in rows:
         if r.get("error"):
             n_errors += 1
             continue
+        answer = r.get("answer_text", "")
+        if "Learned Siamese CNN" in answer:
+            model_name = "change.semantic_model (Siamese CNN, siamese-cnn-v1)"
         meta = r.get("meta") or {}
         if not meta.get("ground_truth_available"):
             continue
@@ -93,7 +98,7 @@ def score(path: str) -> dict:
         "benchmark": "CDVQA (real official test split, over SECOND dataset images)",
         "dataset": "https://github.com/YZHJessica/CDVQA (Apache-2.0 labels) + "
                    "https://captain-whu.github.io/SCD/ (images, license unstated)",
-        "model": "change.deterministic_cv (pixel/geometry-based, NOT a semantic model — see note)",
+        "model": model_name,
         "note": "SatQuery's change specialist measures aggregate pixel/area change, not "
                 "per-land-cover-class semantic change. Low scores on categorical question "
                 "types (smallest/largest/change_to_what) are an expected, honest capability "
