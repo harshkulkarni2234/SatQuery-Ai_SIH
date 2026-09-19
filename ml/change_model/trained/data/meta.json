@@ -1,0 +1,6 @@
+{
+ "seed": 42,
+ "val_frac": 0.15,
+ "size": 256,
+ "colormap": {
+  
