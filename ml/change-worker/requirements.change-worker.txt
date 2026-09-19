@@ -7,7 +7,7 @@
 #      (GPU/CUDA build used in testing; on a CPU-only machine use the standard CPU wheel instead)
 #   2) pip install -r requirements.change-worker.txt
 #
-torch==2.14.0+cu130
+torch>=2.1.0
 numpy==2.2.6
 pillow==12.3.0
 fastapi
