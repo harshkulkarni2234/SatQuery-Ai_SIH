@@ -19,7 +19,7 @@ from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 from PIL import Image
 
 BASE_MODEL_REPO = "HuggingFaceTB/SmolVLM-256M-Instruct"
-DEFAULT_ADAPTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "smolvlm", "lora_stage3")
+DEFAULT_ADAPTER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "smolvlm", "lora_stage3_v2")
 
 TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 

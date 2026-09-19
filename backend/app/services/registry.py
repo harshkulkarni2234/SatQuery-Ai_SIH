@@ -70,7 +70,7 @@ _REGISTRY: list[RegistryEntry] = [
             is_rs_adapted=False,
         ),
         handler=adapters.run_vqa,
-        is_available=_vqa_worker_available,
+        is_available=lambda: _vqa_worker_available(),
     ),
     RegistryEntry(
         spec=SpecialistSpec(
@@ -95,7 +95,7 @@ _REGISTRY: list[RegistryEntry] = [
         # The real model_version used is read back from the worker's own
         # response after the call, never assumed in advance.
         handler=adapters.run_vqa,
-        is_available=_vqa_worker_available,
+        is_available=lambda: _vqa_worker_available(),
     ),
     RegistryEntry(
         spec=SpecialistSpec(

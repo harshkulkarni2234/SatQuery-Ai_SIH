@@ -1,0 +1,5 @@
+{
+  "version": "smolvlm256m-ben-lora-s3-v2.0",
+  "model_card": "ml/adaptation/MODEL_CARD.md",
+  "note": "Real adapter trained from real BigEarthNet v2.0 labels subset. v1.0 (mystery provenance) remains at ml/smolvlm/lora_stage3/ as fallback."
+}

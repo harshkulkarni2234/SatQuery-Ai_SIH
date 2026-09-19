@@ -1,0 +1,108 @@
+{
+  "dataset": "BigEarthNet v2.0 labels (metadata.parquet, Zenodo 10891137) + local testing/ images",
+  "license": "CDLA-Permissive-1.0",
+  "seed": 42,
+  "neg_samples_per_patch": 2,
+  "n_matched_patches": 4008,
+  "official_split_of_all_rows": "train (official parquet marks every matched row as train; train/val/test here is our own seeded split of that set)",
+  "subset_classes_present": {
+    "Arable land": 1646,
+    "Beaches, dunes, sands": 80,
+    "Broad-leaved forest": 876,
+    "Complex cultivation patterns": 1871,
+    "Coniferous forest": 1714,
+    "Industrial or commercial units": 101,
+    "Inland waters": 436,
+    "Inland wetlands": 101,
+    "Land principally occupied by agriculture, with significant areas of natural vegetation": 1412,
+    "Marine waters": 842,
+    "Mixed forest": 1768,
+    "Moors, heathland and sclerophyllous vegetation": 39,
+    "Natural grassland and sparsely vegetated areas": 22,
+    "Pastures": 1112,
+    "Permanent crops": 22,
+    "Transitional woodland, shrub": 1064,
+    "Urban fabric": 515
+  },
+  "class_subject_mapping": {
+    "Urban fabric": "urban areas",
+    "Industrial or commercial units": "industrial or commercial areas",
+    "Arable land": "cropland",
+    "Permanent crops": "permanent crops",
+    "Pastures": "pastures",
+    "Complex cultivation patterns": "complex cultivation",
+    "Land principally occupied by agriculture, with significant areas of natural vegetation": "agricultural land with natural vegetation",
+    "Agro-forestry areas": "agro-forestry areas",
+    "Broad-leaved forest": "broad-leaved forest",
+    "Coniferous forest": "coniferous forest",
+    "Mixed forest": "mixed forest",
+    "Natural grassland and sparsely vegetated areas": "natural grassland or sparsely vegetated areas",
+    "Moors, heathland and sclerophyllous vegetation": "moors or heathland",
+    "Transitional woodland, shrub": "transitional woodland or shrubland",
+    "Beaches, dunes, sands": "beaches, dunes or sand",
+    "Inland wetlands": "inland wetlands",
+    "Coastal wetlands": "coastal wetlands",
+    "Inland waters": "inland water",
+    "Marine waters": "sea or ocean water"
+  },
+  "question_templates": {
+    "presence": [
+      "Is there {s} in this image?",
+      "Does the image contain {s}?",
+      "Is {s} present in this image?"
+    ],
+    "count": [
+      "How many distinct land cover types are present in this image?",
+      "How many land cover classes are present?"
+    ]
+  },
+  "counts": {
+    "per_split": {
+      "train": 20532,
+      "val": 2567,
+      "test": 2546
+    },
+    "per_type": {
+      "count": 4008,
+      "presence": 21637
+    },
+    "per_class": {
+      "agricultural land with natural vegetation::no": 377,
+      "agricultural land with natural vegetation::yes": 1412,
+      "beaches, dunes or sand::no": 594,
+      "beaches, dunes or sand::yes": 80,
+      "broad-leaved forest::no": 454,
+      "broad-leaved forest::yes": 876,
+      "complex cultivation::no": 292,
+      "complex cultivation::yes": 1871,
+      "coniferous forest::no": 336,
+      "coniferous forest::yes": 1714,
+      "cropland::no": 335,
+      "cropland::yes": 1646,
+      "industrial or commercial areas::no": 601,
+      "industrial or commercial areas::yes": 101,
+      "inland water::no": 513,
+      "inland water::yes": 436,
+      "inland wetlands::no": 575,
+      "inland wetlands::yes": 101,
+      "mixed forest::no": 328,
+      "mixed forest::yes": 1768,
+      "moors or heathland::no": 559,
+      "moors or heathland::yes": 39,
+      "natural grassland or sparsely vegetated areas::no": 615,
+      "natural grassland or sparsely vegetated areas::yes": 22,
+      "pastures::no": 447,
+      "pastures::yes": 1112,
+      "permanent crops::no": 604,
+      "permanent crops::yes": 22,
+      "sea or ocean water::no": 462,
+      "sea or ocean water::yes": 842,
+      "transitional woodland or shrubland::no": 424,
+      "transitional woodland or shrubland::yes": 1064,
+      "urban areas::no": 500,
+      "urban areas::yes": 515
+    }
+  },
+  "git_commit": "ae6daf8cc2a8a9ed6b76cdfec9c0324d7851732f",
+  "generated_at": "2026-09-18T12:26:17.112139+00:00"
+}

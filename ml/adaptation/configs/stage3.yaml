@@ -1,20 +1,16 @@
 # Reconstructed Stage-3 LoRA config (Phase B2).
 #
-# Fields under `lora:` come directly from the shipped
-# ml/smolvlm/lora_stage3/adapter_config.json — real, not guessed.
-# Fields under `training:` are UNKNOWN: the adapter's own README.md is an
-# unfilled Hugging Face PEFT template ("[More Information Needed]"
-# everywhere), and no training log, git history, or config file for the
-# original Stage 3 run exists anywhere in this repo. Per this project's
-# honesty rule, these are marked null/unknown explicitly rather than
-# invented — do not fill them in with a plausible-looking guess.
+# `lora:` comes directly from the shipped ml/smolvlm/lora_stage3/adapter_config.json
+# (v1.0, mystery provenance) — real, not guessed. The v1.0 adapter's own README.md
+# is an unfilled HF PEFT template; no training log exists for it, so `training:`
+# (v1.0) fields are honestly marked unknown rather than invented.
 #
-# ml/vqa-worker/README.md section 9 (written before this build, presumably
-# by whoever ran the original training) is the only narrative source that
-# survives: "trained on a small (~64-example) BigEarthNet slice... improved
-# some presence/count categories while captions regressed." That claim is
-# reproduced in MODEL_CARD.md as reported, not independently re-verified
-# against a training log (none exists to check it against).
+# `training_v2:` is the REAL, verifiable config for the retrained v2.0 adapter
+# (ml/smolvlm/lora_stage3_v2/) trained by ml/adaptation/train_lora.py on the
+# dataset built by ml/adaptation/prepare_bigearthnet_vqa.py from official
+# BigEarthNet v2.0 labels (Zenodo metadata.parquet, CDLA-Permissive-1.0),
+# matched to the local testing/ imagery (4008/4011 patches). Full proof lives
+# in ml/smolvlm/lora_stage3_v2/training_log.json.
 
 model:
   base_model: HuggingFaceTB/SmolVLM-256M-Instruct
@@ -34,14 +30,32 @@ lora:
   # source: ml/smolvlm/lora_stage3/adapter_config.json (verbatim)
 
 training:
-  dataset: unknown  # narrative claims "~64-example BigEarthNet slice" (see note above) — not verifiable
+  # v1.0 (mystery provenance). Honest unknowns, NOT guesses.
+  dataset: unknown  # narrative claims "~64-example BigEarthNet slice" (unverifiable)
   learning_rate: unknown
   steps: unknown
   batch_size: unknown
   gradient_accumulation_steps: unknown
   seed: unknown
-  precision: unknown  # adapter_config.json has no dtype field; base model card doesn't specify training precision
+  precision: unknown
   image_size: unknown
-  hardware: unknown  # "T600 ~4GB VRAM" is documented for INFERENCE (ml/vqa-worker/README.md) but not confirmed as the training GPU
+  hardware: unknown  # "T600 ~4GB VRAM" documented for INFERENCE only, not training
 
 version_string: smolvlm256m-ben-lora-s3-v1.0
+
+training_v2:
+  # v2.0 (real, verifiable). Used by ml/adaptation/train_lora.py.
+  dataset: ml/adaptation/dataset/{train,val,test}.jsonl (prepare_bigearthnet_vqa.py)
+  epochs: 3
+  max_train_rows: 2400
+  batch_size: 2
+  gradient_accumulation_steps: 8
+  effective_batch_size: 16
+  learning_rate: 0.0002
+  warmup_frac: 0.05
+  seed: 42
+  precision: fp16
+  image_size: 120x120  # native BigEarthNet patch; processor resizes internally
+  hardware: NVIDIA GeForce RTX 2050 (4096 MiB VRAM), CUDA
+
+version_string_v2: smolvlm256m-ben-lora-s3-v2.0

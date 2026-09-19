@@ -38,7 +38,7 @@ def _load(path: str) -> list[dict]:
     return rows
 
 
-def score(path: str) -> dict:
+def score(path: str, model: str = "SmolVLM-256M-Instruct (base, no LoRA — see note)", note: str = "") -> dict:
     rows = _load(path)
     by_type = defaultdict(list)
     n_errors = 0
@@ -108,10 +108,10 @@ def score(path: str) -> dict:
     return {
         "benchmark": "RSVQA-LR (real official test split)",
         "dataset": "https://zenodo.org/records/6344334 (CC-BY-4.0)",
-        "model": "SmolVLM-256M-Instruct (base, no LoRA — see note)",
-        "note": "Base model only, NOT fine-tuned on this dataset (that's what "
-                "the RTX 2050 training session is for). This is a real "
-                "pre-training baseline, not the model's ceiling.",
+        "model": model,
+        "note": note or "Base model only, NOT fine-tuned on this dataset (that's what "
+                       "the RTX 2050 training session is for). This is a real "
+                       "pre-training baseline, not the model's ceiling.",
         "n_total_rows": len(rows),
         "n_errors": n_errors,
         "by_question_type": results,
@@ -124,9 +124,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="path to a run_rsvqa_lr_eval.py JSONL output")
     parser.add_argument("--output", default="evaluation/results/rsvqa_lr_score.json")
+    parser.add_argument("--model", default=None, help="label written into the result; "
+                        "defaults to the base-model baseline label")
+    parser.add_argument("--note", default=None, help="note written into the result")
     args = parser.parse_args()
 
-    result = score(args.input)
+    result = score(args.input, model=args.model or "SmolVLM-256M-Instruct (base, no LoRA — see note)", note=args.note or "")
     with open(args.output, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Wrote {args.output}")

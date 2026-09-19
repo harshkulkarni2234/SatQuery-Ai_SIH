@@ -44,7 +44,7 @@ def get_provider():
     global _provider
     if _provider is None:
         adapter_dir = os.getenv(
-            "ADAPTER_DIR", os.path.join(APP_DIR, "..", "smolvlm", "lora_stage3")
+            "ADAPTER_DIR", os.path.join(APP_DIR, "..", "smolvlm", "lora_stage3_v2")
         )
         _provider = SmolVLMProvider(
             model_dir=os.getenv("MODEL_DIR", DEFAULT_MODEL_DIR),

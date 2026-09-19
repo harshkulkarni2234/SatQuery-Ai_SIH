@@ -36,7 +36,7 @@ if (-not $env:MODEL_DIR) {
     $env:MODEL_DIR = "HuggingFaceTB/SmolVLM-256M-Instruct"
 }
 if (-not $env:ADAPTER_DIR) {
-    $env:ADAPTER_DIR = Join-Path $scriptDir "..\smolvlm\lora_stage3"
+    $env:ADAPTER_DIR = Join-Path $scriptDir "..\smolvlm\lora_stage3_v2"
 }
 
 Write-Host "Starting VQA worker on http://127.0.0.1:$Port"

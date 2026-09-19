@@ -1,45 +1,48 @@
-# Model Card: smolvlm256m-ben-lora-s3-v1.0
+# Model Card: smolvlm256m-ben-lora-s3-v2.0 (current) / v1.0 (legacy)
 
-Phase B2 ("turn the Stage-3 LoRA experiment into a reproducible
-component"). This card documents what is actually known and actually
-verified about `ml/smolvlm/lora_stage3/` — nothing here is invented to
-fill a gap; unknowns are marked `unknown` explicitly.
+Phase B2 end-state. This card documents what is actually known and
+actually verified about the Stage-3 BigEarthNet LoRA adapters in this
+repository — nothing here is invented to fill a gap; unknowns are marked
+`unknown` explicitly.
 
-## Source dataset
+## The two adapters
 
-**Unknown, with one unverified narrative claim.** No training log, config
-file, git history, or dataset file for the original Stage 3 run exists
-anywhere in this repository. The adapter's own `README.md`
-(`ml/smolvlm/lora_stage3/README.md`) is an entirely unfilled Hugging Face
-PEFT auto-generated template — every section reads `[More Information
-Needed]`.
+| | `smolvlm256m-ben-lora-s3-v2.0` (current) | v1.0 (legacy, `ml/smolvlm/lora_stage3/`) |
+|---|---|---|
+| Provenance | **Real and verifiable** — trained this build | **Unknown** (mystery provenance, see below) |
+| Training log | `ml/smolvlm/lora_stage3_v2/training_log.json` (4,363 lines) | None exists |
+| Dataset | Real BigEarthNet v2.0 (see next section) | Reported "~64-example slice" — unverified |
+| Status | Served by default (`DEFAULT_ADAPTER_DIR` / `ADAPTER_DIR`) | Kept intact as fallback; not served by default |
 
-The only surviving narrative source is `ml/vqa-worker/README.md` section
-9 (written before this solo build, presumably by whoever ran the original
-training): it states the adapter *"was trained on a small (~64-example)
-BigEarthNet slice"*. This claim is reproduced here **as reported, not
-independently re-verified** — there is nothing to check it against.
+From here on, "the adapter" / "v2.0" refers to the currently-served
+`ml/smolvlm/lora_stage3_v2/`.
 
-`prepare_bigearthnet_vqa.py` (the original plan's item 1, a script to
-*build* a question/answer dataset from real BigEarthNet land-cover
-labels) was **not written**: the BigEarthNet imagery available in this
-build (`testing/`, ~4,000 patches, see `data/manifest.json`) ships with
-**zero label files of any kind** — verified directly (no
-`.json`/`.csv`/`.txt`/label file anywhere under `testing/`). There is no
-real label data in this repository to build such a script against.
+## Source dataset (v2.0 — real)
 
-## Model
+Built by `ml/adaptation/prepare_bigearthnet_vqa.py` from **official
+BigEarthNet v2.0 labels** — Zenodo `metadata.parquet` (CDLA-Permissive-1.0
+license), not reconstructed or recollected:
+
+- 4,008 / 4,011 local `testing/` patches matched against the official
+  label table via patch co-ordinates + timestamp; 3 dropped for label
+  table ambiguity (documented in that script).
+- All matched patches are in the **official train split** of BigEarthNet.
+- 17 of 19 official classes present in the matched set (the 2 absent
+  classes never appear in matched patches).
+- 25,645 Q/A pairs (`ml/adaptation/dataset/{train,val,test}.jsonl`):
+  21,637 presence ("is there X" yes/no) + 4,008 count ("how many X").
+- Deterministic 80/10/10 split, seed 42 → 20,532 / 2,567 / 2,546 rows.
+- Dataset stats: `ml/adaptation/dataset/stats.json`.
+
+## Model (v2.0)
 
 - Base: `HuggingFaceTB/SmolVLM-256M-Instruct` (Idefics3 architecture, 256M params).
 - Method: LoRA (PEFT) applied to a `CausalLM`-facade wrapper
   (`DecoderShim` in `ml/vqa-worker/model_provider.py`) over the base
-  model's text decoder only — the vision tower is untouched. This
-  wrapper shape exists because PEFT's `get_peft_model` needs a plain
-  `forward()`/`prepare_inputs_for_generation()` interface that Idefics3's
-  bare decoder submodule doesn't expose directly.
-- Attaches to the same loaded base model in place (no duplicated model
-  copy); toggled per-request via `peft`'s `disable_adapter()` context
-  manager.
+  model's text decoder only — the vision tower is untouched.
+- Attaches to the same loaded base model in place; toggled per-request
+  via `peft`'s `disable_adapter()` context manager.
+- Trainable parameters: **2,442,240** (LoRA, 7 target modules).
 
 ## LoRA configuration (real — from `adapter_config.json`)
 
@@ -52,113 +55,114 @@ real label data in this repository to build such a script against.
 | `task_type` | CAUSAL_LM |
 | `target_modules` | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
 
-See `ml/adaptation/configs/stage3.yaml` for the same values plus the
-training-hyperparameter fields marked `unknown` (learning rate, steps,
-batch size, seed, precision, image size, training hardware — none of
-these are recoverable from anything in this repo).
+## Training (v2.0 — real)
 
-## Evaluation (real, but not accuracy — read this section before quoting a number)
+Trained with `ml/adaptation/train_lora.py` using
+`ml/adaptation/configs/stage3.yaml` `training_v2:`:
 
-**No labeled held-out split exists** (see "Source dataset" above), so
-this build cannot report per-question-type accuracy/exact-match the way
-the original plan describes. What was actually run and is real:
+| Field | Value |
+|---|---|
+| epochs | 3 |
+| max train rows | 2400 (from `dataset/train.jsonl`) |
+| batch size | 2 |
+| gradient accumulation | 8 (effective batch 16) |
+| learning rate | 2e-4 |
+| warmup fraction | 0.05 |
+| seed | 42 |
+| precision | fp16 |
+| image size | 120×120 (native BigEarthNet patch; processor resizes internally) |
+| hardware | NVIDIA GeForce RTX 2050, 4096 MiB VRAM, CUDA |
+| steps | 450 |
+| final loss | ~0.449 |
 
-`ml/adaptation/eval_lora.py` runs the same real image through both base
-and specialist modes, for the same prompts, and reports whether their
-answers agree — a real, reproducible statistic, not an accuracy score.
-Reproduce with:
+Answer-token-only loss masking (prompt tokens masked, `-100`), resumable
+checkpointing, deterministic seed. Full per-step log in
+`ml/smolvlm/lora_stage3_v2/training_log.json`.
 
-```bash
-ml/vqa-worker/venv/bin/python ml/adaptation/eval_lora.py \
-    --images testing/S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_65_03.png \
-              testing/S2A_MSIL2A_20170720T100031_N9999_R122_T34UDG_66_00.png \
-    --output ml/adaptation/results/eval_run.json
-```
+### Held-out validation (real, from training run)
 
-Real result from this exact run (`ml/adaptation/results/eval_run.json`,
-git commit recorded in that file), n=8 (2 images × 4 prompts — a tiny
-sample, stated as such, not a claim of statistical significance):
+On the deterministic val split (200-row subset: 150 presence + 50 count),
+answer exact-match:
 
-| Question type | n | Specialist ran | Exact agreement with base |
+| Question type | n | Exact match |
+|---|---|---|
+| presence | 150 | 149/150 = 99.33% |
+| count | 50 | 48/50 = 96.0% |
+
+Note: these are exact-string matches on synthetically generated labels
+(short canned answers) — the model is being tested on the same question
+format it was trained with. They do **not** transfer unchanged to
+RSVQA-LR (see the live benchmark below).
+
+## Live benchmark: RSVQA-LR (real official test split, same runner as baseline)
+
+`evaluation/results/rsvqa_lr_score_v2.json` vs the base-model baseline
+`evaluation/results/rsvqa_lr_score.json` — same 240-question stratified
+test sample, same HTTP runner, seed 42. Both runs: 0 API errors.
+
+| Question type | Base model | v2.0 adapter | Metric |
 |---|---|---|---|
-| presence | 4 | 4/4 | 0/4 |
-| count | 2 | 2/2 | 0/2 |
-| description | 2 | 2/2 | 0/2 |
+| presence | 73.3% | 70.0% | yes/no accuracy |
+| comparative | 65.0% | 70.0% | yes/no accuracy |
+| rural/urban | 40.7% | 61.7% | urban/rural keyword match |
+| count (exact) | 0.0% | 5.1% | exact integer match |
+| count (RMSE) | 206.6 | 2,264,550 | RMSE over parsed counts |
+| approx. overall | 50.2% | 56.2% | weighted mix per `score_rsvqa_lr.py` |
 
-Specialist activation rate: 1.00 (loads and runs without error on every
-call in this run — this was previously **unverified** in this build;
-Phase B2's GPU re-check confirmed it for the first time on real hardware,
-Apple M2 via MPS). Exact agreement rate with base: 0.00 (expected — the
-specialist gives short, direct answers by design; see below).
+Interpretation (be honest — do not over-claim):
 
-One real, observed example from that run (not cherry-picked for effect —
-it's row 4 of the JSON): asked *"What can you tell me about this
-image?"* on a real 120×120 BigEarthNet optical patch, the **base** model
-hallucinated *"a close-up view of a light-colored... surface... possibly
-glass or a polished metal"* (256M-param general VLMs are known to
-struggle badly on tiny, low-context satellite crops), while the
-**specialist** answered *"A high-resolution image of a green and blue
-gradient background"* — shorter and closer to the actual patch content,
-though still not a real land-cover description. Neither answer was
-checked against ground truth (none exists); this is a single qualitative
-observation, not a claim that the specialist is generally better.
+- The adapter **improves** comparative (+5.0 pts), rural/urban (+21.0 pts),
+  count exact match (0 → 5.1%), and approx. overall (+6.0 pts).
+- It **slightly regresses** presence (−3.3 pts).
+- Count RMSE is **far worse** (2.26M vs 207): 21/60 unparseable, and
+  several wildly overblown numeric guesses (e.g. "1000"/"10000000"
+  against ground truth 6–33) dominate the RMSE. Exact-match improved but
+  the adapter's count behaviour on RSVQA-LR is not reliable.
+- Therefore the v2.0 adapter is **not universally better** than base on
+  RSVQA-LR. Present it as a mixed, honest result, not a win.
 
-**This does NOT confirm or refute** `ml/vqa-worker/README.md`'s inherited
-claim that "captions regressed (became empty/terse)" under the
-specialist — n=8 with no ground truth cannot support or contradict a
-claim about caption quality either way. That claim is carried forward
-in this build only as an attributed, unverified statement from before
-this session, not as something this evaluation re-derived.
+## Specialist question-type gating (narrow, unchanged)
 
-## Supported question types (narrow, unchanged from the original design)
+Specialist mode is gated to presence/existence and simple counting
+questions — see `should_use_specialist()` in `model_provider.py` and
+`backend/app/services/vqa.py`. Other question types always use the base
+model. Any specialist inference failure falls back to base automatically.
 
-Specialist mode is gated to only presence/existence questions ("is there
-X", "does the image contain X") and simple counting questions ("how many
-X") — see `should_use_specialist()` in both `model_provider.py` and
-`backend/app/services/vqa.py` (kept in sync). Everything else (captions,
-descriptions, spatial/grounding language, change/comparison language,
-optical/SAR language) always uses the base model. Any specialist
-inference failure falls back to base automatically (see
-`model_provider.py`'s `answer_question`).
+## Verification on GPU (v2.0)
 
-## Verified working, for the first time in this build (Phase B2/B8 GPU re-check)
+`SmolVLMProvider` with `ADAPTER_DIR=ml/smolvlm/lora_stage3_v2` loads on
+CUDA (RTX 2050): `specialist_available=true`, `specialist_errors=[]`,
+reported `model_version = smolvlm256m-ben-lora-s3-v2.0`, served through
+both the worker `/health` and per-request `/vqa` responses. Base adapter
+is disabled per request (not a duplicated model copy).
 
-Before this phase, this build's own documentation incorrectly stated "no
-GPU" for the whole project — that conflated "no CUDA GPU" with "no GPU at
-all". This development machine has an Apple M2 GPU, and PyTorch's MPS
-(Metal) backend was verified to work: `torch.backends.mps.is_available()`
-is `True`, a real matrix multiply ran on it, and — most relevantly here —
-**this exact adapter loads and runs inference successfully on it**,
-`specialist_available: true`, `specialist_errors: []`. This was never
-tested in this build until now; `model_provider.py`'s device selection
-previously only ever checked for CUDA and silently ran on CPU on this
-machine. Fixed alongside this evaluation (see `model_provider.py` and its
-new `ml/vqa-worker/test_model_provider.py`).
+## Legacy v1.0 (mystery provenance — kept, not served)
 
-Real measured latency on this machine (MPS, fp32 — fp16 is deliberately
-not used on MPS, see `model_provider.py`'s comment): base mode ~3-12s
-per request depending on answer length, specialist mode ~3-4s (shorter
-answers). Not benchmarked against the original CUDA target machine
-(a ~4GB T600, per `ml/vqa-worker/README.md`) in this build.
+The original `ml/smolvlm/lora_stage3/` adapter: **no training log, config,
+dataset, or git history exists for it**; its own `README.md` is an
+unfilled HF PEFT template. The only surviving narrative claim (from
+`ml/vqa-worker/README.md` section 9, written before this build) is that it
+was *"trained on a small (~64-example) BigEarthNet slice"*. Reproduced as
+**reported, not verified** — nothing in this repo supports it. It remains
+in the repo for A/B comparison but is not the default.
 
 ## Limitations
 
-- Training provenance is unverifiable (see "Source dataset"). Do not
-  present this adapter's origin with more confidence than "reportedly
-  trained on ~64 examples, unconfirmed."
-- No labeled evaluation set exists to validate output quality
-  numerically. The evaluation in this card is a base-vs-specialist
-  agreement/activation check, not an accuracy benchmark.
-- Narrow scope by design: only presence/count question types.
-- 256M-parameter base model visibly struggles with tiny (120×120),
-  low-context satellite crops in both modes — see the real example
-  above. Do not present this system's VQA output as reliable land-cover
+- 256M-parameter base model struggles with tiny (120×120) low-context
+  satellite crops; do not present VQA output as reliable land-cover
   classification.
+- Val exact-match numbers reflect the trained question format; live
+  RSVQA-LR shows mixed transfer (see table above).
+- Count RMSE on RSVQA-LR is dominated by overstated numeric guesses —
+  count output is unreliable on that benchmark.
+- v2.0 training used 2,400 rows of the 20,532-row train split (practical
+  GPU-time limit). A fully-trained adapter (20k rows) may behave
+  differently; nothing here claims otherwise.
 
-## Version string
+## Version strings
 
-`smolvlm256m-ben-lora-s3-v1.0` — read at runtime from
-`ml/smolvlm/lora_stage3/version.json` by `model_provider.py`
-(`_read_specialist_version`), not hardcoded in worker code, and returned
-in every `/vqa` response's `model_version` field alongside `adapter_used`
-(bool) and `reason` (why base vs. specialist was used for that request).
+- v2.0: `smolvlm256m-ben-lora-s3-v2.0` — read at runtime from
+  `ml/smolvlm/lora_stage3_v2/version.json` by `model_provider.py`
+  (`_read_specialist_version`), returned in every `/vqa` response's
+  `model_version` alongside `adapter_used` (bool) and `reason`.
+- v1.0: `smolvlm256m-ben-lora-s3-v1.0` (`ml/smolvlm/lora_stage3/version.json`).

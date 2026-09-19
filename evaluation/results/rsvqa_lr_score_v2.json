@@ -1,0 +1,47 @@
+{
+  "benchmark": "RSVQA-LR (real official test split)",
+  "dataset": "https://zenodo.org/records/6344334 (CC-BY-4.0)",
+  "model": "SmolVLM-256M-Instruct + Stage-3 BigEarthNet LoRA v2.0 (smolvlm256m-ben-lora-s3-v2.0)",
+  "note": "Real retrained adapter (ml/smolvlm/lora_stage3_v2/), trained on 2400 real BigEarthNet v2.0 QA rows; full log in ml/smolvlm/lora_stage3_v2/training_log.json. Same test split and runner as the base-model baseline (rsvqa_lr_score.json).",
+  "n_total_rows": 240,
+  "n_errors": 0,
+  "by_question_type": {
+    "rural_urban": {
+      "n": 60,
+      "metric": "categorical_accuracy (urban/rural keyword match in free text)",
+      "accuracy": 0.6166666666666667,
+      "n_scored": 60,
+      "n_unparseable": 0,
+      "n_total": 60
+    },
+    "presence": {
+      "n": 60,
+      "n_ground_truth_unparseable": 0,
+      "metric": "yes_no_accuracy",
+      "accuracy": 0.7,
+      "n_scored": 60,
+      "n_unparseable": 0,
+      "n_total": 60
+    },
+    "comp": {
+      "n": 60,
+      "n_ground_truth_unparseable": 0,
+      "metric": "yes_no_accuracy",
+      "accuracy": 0.7,
+      "n_scored": 60,
+      "n_unparseable": 0,
+      "n_total": 60
+    },
+    "count": {
+      "n": 60,
+      "metric": "count_accuracy_rmse",
+      "rmse": 2264550.357923989,
+      "exact_accuracy": 0.05128205128205128,
+      "n_scored": 39,
+      "n_unparseable": 21,
+      "n_total": 60
+    }
+  },
+  "approx_overall_accuracy": 0.5616438356164384,
+  "date": "2026-09-19T07:51:04.108769+00:00"
+}
