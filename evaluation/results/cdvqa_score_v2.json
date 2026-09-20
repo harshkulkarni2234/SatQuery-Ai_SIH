@@ -79,5 +79,5 @@
   "n_scored_total": 28,
   "date": "2026-09-19T12:16:33.430537+00:00",
   "evaluated_with": "Change-specialist implementation as of commits c4a5fda/ecd5116 (before the honesty hardening: older answer wording, no domain gating). Re-run to refresh against the current code.",
-  "possible_contamination": "CDVQA's 968 test pairs are a subset of SECOND's 2,968 pairs and the change model was trained on 2,000 of them (2,968-968=2,000 would fit a deliberate exclusion, but that is unconfirmed); unless data prep excluded the CDVQA test pairs, some evaluated images were seen in training. Not yet checked (ml/change_model/check_cdvqa_leakage.py)."
+  "train_test_leakage_check": "Checked with ml/change_model/check_cdvqa_leakage.py: 0 of CDVQA's 968 test pairs appear in the change model's 1,700 train / 300 val images. Evaluation is in-distribution (same SECOND imagery source)."
 }

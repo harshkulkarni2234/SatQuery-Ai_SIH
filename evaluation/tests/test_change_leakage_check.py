@@ -36,13 +36,32 @@ def test_report_counts_overlap_and_unseen_eval_pairs():
     assert r["eval_pairs_seen_in_training"] == 1 and r["eval_pairs_unseen"] == ["4"]
 
 
-def test_main_exit_codes(tmp_path, monkeypatch):
-    monkeypatch.setattr(cdvqa_adapter, "load_real_test_set", lambda split="Test": _rows(["10", "11", "12"]))
-    train = _write(tmp_path, "train.json", ["1", "2"])
+def _images_json(tmp_path, names, inactive=()):
+    items = [{"id": i, "file_name": f"{n}.png", "active": True} for i, n in enumerate(names)]
+    items += [{"id": 99, "file_name": f"{n}.png", "active": False} for n in inactive]
+    return _write(tmp_path, "Test_images.json", {"images": items})
+
+
+def test_main_exit_codes(tmp_path):
+    test_imgs = _images_json(tmp_path, ["10", "11", "10", "12"], inactive=["1"])  # dupes + inactive ignored
     val = _write(tmp_path, "val.json", ["3"])
-    assert leak.main(["--train-names", train, "--val-names", val, "--per-type", "0"]) == 0
 
-    train_bad = _write(tmp_path, "train_bad.json", ["1", "11"])
-    assert leak.main(["--train-names", train_bad, "--val-names", val, "--per-type", "3"]) == 1
+    clean = _write(tmp_path, "train.json", ["1", "2"])  # "1" is only an INACTIVE test entry
+    assert leak.main(["--train-names", clean, "--val-names", val, "--test-images", test_imgs]) == 0
 
-    assert leak.main(["--train-names", str(tmp_path / "missing.json"), "--val-names", val]) == 2
+    dirty = _write(tmp_path, "train_bad.json", ["1", "11"])
+    assert leak.main(["--train-names", dirty, "--val-names", val, "--test-images", test_imgs]) == 1
+
+    assert leak.main(["--train-names", str(tmp_path / "missing.json"), "--val-names", val,
+                      "--test-images", test_imgs]) == 2
+    assert leak.main(["--train-names", clean, "--val-names", val,
+                      "--test-images", str(tmp_path / "nope.json")]) == 2
+
+
+def test_eval_sample_overlap_uses_the_adapter(tmp_path, monkeypatch):
+    monkeypatch.setattr(cdvqa_adapter, "load_real_test_set", lambda split="Test": _rows(["10", "11", "12"]))
+    test_imgs = _images_json(tmp_path, ["10", "11", "12"])
+    train = _write(tmp_path, "train.json", ["11"])
+    val = _write(tmp_path, "val.json", ["3"])
+    assert leak.main(["--train-names", train, "--val-names", val, "--test-images", test_imgs,
+                      "--per-type", "3"]) == 1

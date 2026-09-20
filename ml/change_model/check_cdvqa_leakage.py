@@ -6,16 +6,16 @@ pairs, and the change model was trained on 2,000 of those 2,968 (1,700 train /
 large share of the CDVQA evaluation images were seen in training, and the
 CDVQA scores of the learned model are then contaminated.
 
-Run on the machine that has the training data (needs the two names files the
-training run wrote, and the CDVQA raw JSONs — see evaluation/cdvqa/README.md):
+Needs the two committed names files and CDVQA's Test_images.json (see
+evaluation/cdvqa/README.md), nothing else:
 
     python ml/change_model/check_cdvqa_leakage.py \
         --train-names ml/change_model/trained/data/train_names.json \
         --val-names   ml/change_model/trained/data/val_names.json
 
-Exit code 0 = no overlap, 1 = overlap found, 2 = bad input. With --per-type it
-also reports the overlap for the pairs a seeded CDVQA eval actually used
-(defaults match the committed v2 run: 15 questions/type, seed 42).
+Exit code 0 = no overlap, 1 = overlap found, 2 = bad input. Result of the run
+on the committed split: 0 of 968 CDVQA test pairs appear in the 1,700 train or
+300 val images (see MODEL_CARD.md).
 """
 
 from __future__ import annotations
@@ -58,12 +58,27 @@ def report(train: set[str], val: set[str], test_pairs: set[str],
     return out
 
 
+DEFAULT_TEST_IMAGES = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "evaluation", "cdvqa", "raw", "Test_images.json"
+)
+
+
+def load_test_pairs(path: str) -> set[str]:
+    """The CDVQA test pair ids (SECOND file stems) from Test_images.json."""
+    with open(path) as f:
+        data = json.load(f)
+    return {_stem(i["file_name"]) for i in data["images"] if i.get("active")}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--train-names", required=True)
     ap.add_argument("--val-names", required=True)
-    ap.add_argument("--per-type", type=int, default=15,
-                    help="questions per type of the CDVQA eval sample to check (0 = skip)")
+    ap.add_argument("--test-images", default=DEFAULT_TEST_IMAGES,
+                    help="CDVQA Test_images.json (see evaluation/cdvqa/README.md)")
+    ap.add_argument("--per-type", type=int, default=0,
+                    help="also report the overlap for the pairs a seeded CDVQA eval sample used "
+                         "(15 = the committed v2 run); needs the full CDVQA Test_* JSONs")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--split", default="Test")
     args = ap.parse_args(argv)
@@ -71,23 +86,22 @@ def main(argv: list[str] | None = None) -> int:
     try:
         train = load_names(args.train_names)
         val = load_names(args.val_names)
-    except (OSError, ValueError) as exc:
-        print(f"could not read names files: {exc}", file=sys.stderr)
+        test_pairs = load_test_pairs(args.test_images)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"could not read inputs: {exc}", file=sys.stderr)
         return 2
 
-    try:
-        from evaluation.runners import cdvqa_adapter as cd
-        rows = cd.load_real_test_set(args.split)
-    except Exception as exc:  # missing raw JSONs, or not run from the repo root
-        print(f"could not load CDVQA {args.split} labels (run from the repo root; "
-              f"see evaluation/cdvqa/README.md): {exc}", file=sys.stderr)
-        return 2
-
-    test_pairs = {_stem(r["file_name"]) for r in rows}
     eval_pairs = None
     if args.per_type:
-        sample = cd.stratified_sample(rows, per_type=args.per_type, seed=args.seed)
-        eval_pairs = {_stem(r["file_name"]) for r in sample}
+        try:
+            from evaluation.runners import cdvqa_adapter as cd
+            rows = cd.load_real_test_set(args.split)
+            sample = cd.stratified_sample(rows, per_type=args.per_type, seed=args.seed)
+            eval_pairs = {_stem(r["file_name"]) for r in sample}
+        except Exception as exc:  # missing raw JSONs, or not run from the repo root
+            print(f"could not build the eval sample (run from the repo root with the full "
+                  f"CDVQA Test_* JSONs): {exc}", file=sys.stderr)
+            return 2
 
     result = report(train, val, test_pairs, eval_pairs)
     print(json.dumps({k: v for k, v in result.items() if k != "eval_pairs_unseen"}, indent=2))

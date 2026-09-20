@@ -176,20 +176,20 @@ summary with the specific step that failed if something's wrong.
   classify land cover. It is an original small Siamese CNN (~4.9M params)
   trained on a SECOND-derived split (1,700 train / 300 val; val F1 0.468,
   IoU 0.327), 0.5–3 m aerial RGB only. The SECOND dataset's license is
-  unstated, so treat the model as research-only. Its CDVQA numbers are potentially contaminated: the
-  CDVQA test pairs are a subset of the SECOND pairs its training pool was drawn from, and the
-  overlap check (`ml/change_model/check_cdvqa_leakage.py`) has not been run
-  yet — see `ml/change_model/MODEL_CARD.md` (Known Limitations 7–8).
+  unstated, so treat the model as research-only. A leakage check confirmed none of the
+  CDVQA test images were in its training/validation split (it is still an
+  in-distribution evaluation) — see `ml/change_model/MODEL_CARD.md`
+  (Known Limitations 7–9).
 - The CDVQA numbers for it are a small sample (13–15 questions per type)
-  and not like-for-like with the deterministic baseline, and possibly on
-  images it trained on — don't quote them as an improvement or as held-out
-  results (`evaluation/README.md`).
+  and not like-for-like with the deterministic baseline, but on images the model
+  never trained on (leakage checked: none) — don't quote them as an
+  improvement (`evaluation/README.md`).
 - The BigEarthNet LoRA adapter v2.0 is real (trained on official
   BigEarthNet v2.0 labels), but its RSVQA-LR results (60 questions/type) are **mixed** versus the base
   model, not a clear win: rural/urban 61.7% vs 40.7% and comparison 70.0%
   vs 65.0%, but presence 70.0% vs 73.3%, and counting is still unreliable
   (2/39 exact, 21 unparseable). Its
-  weights are not committed to the repo either. See
+  adapter weights are not committed to the repo. See
   `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`.
 - Real benchmark runs exist for RSVQA-LR, CDVQA and VRSBench (three tasks),
   each on a seeded sample, not the full test sets — see

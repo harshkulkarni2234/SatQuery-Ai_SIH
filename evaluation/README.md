@@ -202,13 +202,11 @@ figure (0.321 vs 0.267) is computed over scored answers only — 9/28 vs 4/15
 — so it is not a like-for-like comparison, and the per-type differences are
 within noise at these sample sizes. The v2 run predates the change
 specialist's honesty hardening (new answer wording, domain gating, no
-worker-side files); re-run it to refresh. **Possible contamination:** CDVQA's
-968 test pairs are a subset of SECOND's 2,968 pairs and the change model was
-trained on 2,000 of those, so some evaluated images may have been seen in
-training unless data prep excluded them (2,968 − 968 = 2,000 would fit an
-exclusion, unconfirmed). Not yet checked — run
-`ml/change_model/check_cdvqa_leakage.py` (it also reports how many of the
-120 evaluated pairs were unseen) before treating these numbers as held-out.
+worker-side files); re-run it to refresh. **No train/test leakage:** CDVQA's 968
+test pairs are a subset of SECOND's 2,968 pairs, and
+`ml/change_model/check_cdvqa_leakage.py` found none of them in the change
+model's 1,700 train / 300 val images, so every evaluated image was unseen.
+The evaluation is still in-distribution (same SECOND source).
 
 ## Real labeled benchmark: VRSBench (VQA, referring/grounding, captioning)
 
