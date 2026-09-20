@@ -37,8 +37,8 @@ pip install torch==2.14.0+cu130 --index-url https://download.pytorch.org/whl/cu1
 # then the rest (pinned to the versions verified in testing):
 pip install -r requirements.change-worker.txt
 ```
-No GPU at all (neither CUDA): install the regular CPU `torch` wheel —
-the worker still runs, just far slower.
+No CUDA GPU: install the regular CPU `torch` wheel — the worker runs fine
+(this model is small).
 
 ## 5. Start the worker
 ```powershell
@@ -85,9 +85,10 @@ module + decoder, trained on the SECOND-derived dataset
 RTX 2050). Model version: `siamese-cnn-v1`.
 
 ## 8. GPU requirement / limitations
-- Needs a CUDA GPU for reasonable latency. `model_provider.py`
-  auto-detects CUDA (fp16) and otherwise uses CPU (fp32), which runs but is
-  far slower. There is no MPS (Apple Silicon) path.
+- A GPU is optional. `model_provider.py` auto-detects CUDA (fp16) and
+  otherwise uses CPU (fp32); the model is small, and one 256×256 pair took
+  roughly 70–120 ms on an Apple-silicon CPU (one warm sample, not a
+  benchmark). There is no MPS path.
 - Requests are processed **serially** (single inference slot) — no
   parallelism.
 - No retraining at request time, and this service will NOT fetch any

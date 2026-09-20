@@ -127,7 +127,7 @@ or 500s (see `docs/HARDENING_REPORT.md`). To demonstrate this live:
 For **change detection**, there are two specialists. `change.siamese_binary_cnn`
 is a learned binary change/no-change model served by the optional change
 worker (`ml/change-worker/`, port 8002, needs its own venv and the trained
-weights, which are not committed to the repo). `change.deterministic_cv`
+weights, which are committed under `ml/change_model/trained/`). `change.deterministic_cv`
 needs no worker and is always available. To demonstrate the honest fallback
 live: with the change worker running, run a change query, then stop the
 worker (Ctrl+C) and re-run it. Expected: the query still returns 200, the
@@ -176,9 +176,8 @@ summary with the specific step that failed if something's wrong.
   classify land cover. It is an original small Siamese CNN (~4.9M params)
   trained on a SECOND-derived split (1,700 train / 300 val; val F1 0.468,
   IoU 0.327), 0.5–3 m aerial RGB only. The SECOND dataset's license is
-  unstated, so treat the model as research-only. Its trained weights are
-  not committed, and its CDVQA numbers are potentially contaminated: the
-  CDVQA test pairs are a subset of the SECOND pairs it trained on, and the
+  unstated, so treat the model as research-only. Its CDVQA numbers are potentially contaminated: the
+  CDVQA test pairs are a subset of the SECOND pairs its training pool was drawn from, and the
   overlap check (`ml/change_model/check_cdvqa_leakage.py`) has not been run
   yet — see `ml/change_model/MODEL_CARD.md` (Known Limitations 7–8).
 - The CDVQA numbers for it are a small sample (13–15 questions per type)

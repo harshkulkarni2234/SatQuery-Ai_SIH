@@ -75,7 +75,7 @@ else
 fi
 
 # 4. Change-detection worker (optional — needs its own venv AND the trained
-# weights, which are not committed; without them the deterministic
+# weights (committed under ml/change_model/trained/); without them the deterministic
 # pixel-difference method runs and the result says so).
 CHANGE_DIR="$REPO_ROOT/ml/change-worker"
 CHANGE_WEIGHTS="$REPO_ROOT/ml/change_model/trained/best_change_model.pt"

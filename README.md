@@ -66,7 +66,7 @@ The backend never imports `torch`; the heavy ML stack lives in separate worker s
 - **Grounding** uses a deterministic computer-vision pipeline (OpenCV + NumPy): HSV thresholding, morphological cleaning, connected-component analysis.
 - **Change detection** uses real geographic reprojection (`rasterio.warp.reproject`) when both images are georeferenced, falling back to phase-correlation registration otherwise; reports real changed area in m² from actual pixel resolution (never estimated), and always states its real alignment method.
 - **Optical + SAR fusion** uses deterministic multimodal feature analysis (speckle-filtered SAR backscatter/VV-VH stats, optical colour/NDVI-NDWI stats where bands allow), with per-class (water/vegetation/built-up) attribution reported as `both`/`optical_only`/`sar_only`/`none` — never claims combined evidence unless both sensors actually produced a real signal. Pixel-level agreement confidence is only computed when `coregistration` is independently verified or assumed from real file metadata — never guessed.
-- **Learned change detection** (`change.siamese_binary_cnn`) is a small original Siamese CNN (~4.9M params) trained on a SECOND-derived split, served by the optional change worker (`ml/change-worker/`). It is **binary** change/no-change: it shows *where* pixels changed, not *what* they changed to, and does not classify land cover. It only runs for same-size pairs that are not provably different areas and not known to be coarser than 3 m/pixel (its 0.5–3 m aerial training domain); otherwise, or if the worker is down or returns something invalid, the deterministic method runs and the result says so (`used_fallback`, warnings, and the executed specialist id in the trace). Model card: `ml/change_model/MODEL_CARD.md`. Trained weights are not committed to the repo.
+- **Learned change detection** (`change.siamese_binary_cnn`) is a small original Siamese CNN (~4.9M params) trained on a SECOND-derived split, served by the optional change worker (`ml/change-worker/`). It is **binary** change/no-change: it shows *where* pixels changed, not *what* they changed to, and does not classify land cover. It only runs for same-size pairs that are not provably different areas and not known to be coarser than 3 m/pixel (its 0.5–3 m aerial training domain); otherwise, or if the worker is down or returns something invalid, the deterministic method runs and the result says so (`used_fallback`, warnings, and the executed specialist id in the trace). Model card: `ml/change_model/MODEL_CARD.md`. Trained weights are committed under `ml/change_model/trained/`.
 
 ## Scientific honesty
 
@@ -143,9 +143,8 @@ Windows can instead run `.\run_worker.ps1`, which honours
 ### 3. Change worker (separate environment, optional)
 
 Serves the learned binary change model. It needs its own venv and the
-trained weights `ml/change_model/trained/best_change_model.pt`, which are
-**not committed** to this repository (they come from the training machine).
-Without it, change queries run the deterministic pixel-difference method and
+trained weights `ml/change_model/trained/best_change_model.pt` (committed
+in this repository). Without the worker running, change queries run the deterministic pixel-difference method and
 say so. Setup and API: `ml/change-worker/README.md`.
 
 ```bash
@@ -252,7 +251,7 @@ Known limitations, stated honestly rather than hidden:
 
 - The deterministic change method measures **pixel-level visual differences**, not semantic land-cover change (no autonomous "building constructed" claims), and never estimates changed area when pixel resolution is unknown. The learned change model is binary only — it does not say *what* changed either.
 - GPU: the VQA worker was verified on an Apple M2 (PyTorch MPS). The LoRA adapter v2.0 and the change model were trained on a separate Windows laptop with an NVIDIA RTX 2050 (CUDA, fp16). A GPU was never the blanket blocker earlier drafts of this README implied.
-  - **Learned change model:** real and trained, but binary-only and trained on a small split (1,700 train / 300 val; val F1 0.468, IoU 0.327). On CDVQA (120-question sample) it produced parseable percentages more often than the deterministic baseline, but the sample is small and the overall numbers are not like-for-like — see `ml/change_model/MODEL_CARD.md`. Two things are not yet done: committing/shipping the trained weights, and running `ml/change_model/check_cdvqa_leakage.py` — CDVQA's test pairs are a subset of the SECOND pairs the model trained on, so its CDVQA numbers are potentially contaminated until that check reports no overlap.
+  - **Learned change model:** real and trained, but binary-only and trained on a small split (1,700 train / 300 val; val F1 0.468, IoU 0.327). On CDVQA (120-question sample) it produced parseable percentages more often than the deterministic baseline, but the sample is small and the overall numbers are not like-for-like — see `ml/change_model/MODEL_CARD.md`. One thing is not yet done: running `ml/change_model/check_cdvqa_leakage.py` — CDVQA's test pairs are a subset of the SECOND pairs the model's training pool was drawn from, so its CDVQA numbers are potentially contaminated until that check reports no overlap.
   - **BigEarthNet LoRA adapter v2.0 (Phase B2):** trained on official BigEarthNet v2.0 labels matched to the local `testing/` patches (25,645 QA pairs; 2,400 rows / 450 steps actually trained). Its RSVQA-LR result (60 questions per type) is **mixed** versus the base model with no adapter, not a clear improvement: rural/urban 61.7% vs 40.7%, comparison 70.0% vs 65.0%, presence 70.0% vs 73.3%, and count answers have a meaningless RMSE (2.26M, outliers) with only 2/39 exact — see `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`. The adapter weights are not committed; the served default is `ml/smolvlm/lora_stage3_v2`.
   - **Benchmarks (Phases B3–B6, B10):** real seeded-sample runs exist for RSVQA-LR, CDVQA and VRSBench (VQA, referring, captioning); they are samples, not full test sets — see the tables in `evaluation/README.md`. There is no `docs/EVALUATION.md`; see `docs/SOLO_PROGRESS.md` for the status of every phase.
 - Optical ↔ SAR **spatial correspondence is never claimed** unless verified from real file metadata (matching CRS + transform); the cross-modal result reports per-sensor/per-class attribution and states honestly when correspondence is unverified, even for a pair that is genuinely co-registered by construction but ships without embedded georeferencing (see `data/demo/scenario_C_optical_sar/README.md`).
@@ -297,7 +296,7 @@ satquery-ai/
 │   │   ├── run_worker.ps1
 │   │   └── requirements.vqa-worker.txt
 │   ├── change-worker/              # separate change-detection worker (Siamese CNN), :8002
-│   ├── change_model/               # training script, model card, selection notes (weights not committed)
+│   ├── change_model/               # training script, model card, selection notes, trained weights + split files
 │   ├── smolvlm/lora_stage3/        # legacy BigEarthNet LoRA adapter (v1.0, unknown provenance)
 │   ├── smolvlm/lora_stage3_v2/     # current LoRA adapter v2.0 config/logs (weights not committed)
 │   └── data/                       # demo-data fetch scripts (e.g. download_lakemead_temporal_pair.py)
@@ -325,10 +324,10 @@ This was built solo against a plan originally scoped for 3 parallel
 contributors (Person A: backend/geospatial, Person B: ML/eval, Person C:
 frontend/report/demo) — see `docs/satquery-master-build-spec.md` for the
 original plan and `docs/SOLO_PROGRESS.md` for exactly which phases are
-done, deferred, or blocked, and the real reason for each. Two model
-artifacts (the change model and the LoRA v2.0 adapter) were trained on a
-separate RTX 2050 laptop and their weights are not yet committed to this
-repository. Nothing above claims work that file doesn't corroborate.
+done, deferred, or blocked, and the real reason for each. Two models
+(the change model and the LoRA v2.0 adapter) were trained on a separate
+RTX 2050 laptop; the change model's weights are committed, the LoRA v2.0
+adapter weights are not yet. Nothing above claims work that file doesn't corroborate.
 
 ## License
 

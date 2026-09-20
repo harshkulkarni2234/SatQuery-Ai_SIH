@@ -67,7 +67,7 @@ After Image  (256×256×3) ──┘
 | **Normalization** | ImageNet mean/std ([0.485, 0.456, 0.406] / [0.229, 0.224, 0.225]) |
 | **Best Metric** | Val F1 = 0.4677, Val IoU = 0.3268 (epoch 5) |
 | **Hardware** | NVIDIA GeForce RTX 2050 (CUDA) |
-| **Training Time** | ~5 min/epoch (varies) |
+| **Training Time** | 40–81 s per epoch, ≈5.2 min for the 5 epochs (from `trained/change_training_log.json`) |
 
 ---
 
@@ -97,7 +97,7 @@ The model measures aggregate pixel-level change coverage. It reports a percentag
 - `change_ratio` is 4/13 correct vs 1/7 for the baseline — but the baseline could only parse 7 of 13 answers, so the two are not measured on the same set. The difference is within sampling noise.
 - The headline "overall accuracy" is computed over *scored* answers only: 9/28 for the Siamese CNN vs 4/15 for the baseline. It is not a like-for-like comparison, and most of the gap is that the learned answer states its percentage in a form the scorer can parse.
 - All yes/no types and all categorical types (smallest / largest / change_to_what) remain **unscored (0 parseable)** because the model states aggregate change, not a verdict or a land-cover class. This is an honest capability gap, not something this model addresses.
-- **Possible contamination:** CDVQA's test pairs are a subset of the SECOND pairs this model trained on (see Known Limitation 7), so these figures may be on images the model has seen. Treat them as unverified until `check_cdvqa_leakage.py` has been run.
+- **Possible contamination:** CDVQA's test pairs are a subset of the SECOND pairs the training pool was drawn from (see Known Limitation 7), so these figures may be on images the model has seen. Treat them as unverified until `check_cdvqa_leakage.py` has been run.
 - The run was made with the change-specialist implementation as of commits `c4a5fda`/`ecd5116`; answer wording and domain gating have since changed, so re-run before quoting.
 
 **No claim of superiority is made** beyond: on this 120-question sample the learned model's percentage was parseable more often.
@@ -133,9 +133,10 @@ This model was trained on images from the **SECOND dataset** (Semantic Change De
 
 1. **Binary only**: Cannot answer "what changed" — only "did it change."
 2. **Fixed input size**: Trained and evaluated on 256×256 images.
-3. **Single GPU**: Requires CUDA for reasonable latency (~929ms per inference on RTX 2050). CPU inference is significantly slower.
+3. **Latency**: CUDA (fp16) is used when available, but is not required — the model is small (4.9M params) and a 256×256 pair ran in ~70–120 ms on an Apple-silicon CPU (one warm sample, not a benchmark). An earlier draft's "~929 ms on RTX 2050" figure was not reproduced and is dropped.
 4. **No georeferencing awareness**: The model treats images as raw pixels; it does not use CRS, bounds, or resolution metadata.
 5. **SECOND dataset license unstated**: Training data license status is unclear.
 6. **Training domain**: SECOND is 0.5–3 m aerial RGB. The backend only runs this model on pairs that are the same size, not provably different areas, and not known to be coarser than 3 m per pixel; otherwise it runs the deterministic method and says so. When the resolution is unknown the model still runs, with a warning.
-7. **Likely train/test overlap on CDVQA**: CDVQA's 968 test pairs are a *subset* of SECOND's 2,968 public pairs, and this model was trained on 2,000 of those 2,968 (1,700 train / 300 val). Unless the data-preparation step excluded the CDVQA test pairs — the preparation script is not in this repo, so this is unknown — a large share of the CDVQA evaluation images were seen in training, and the model's CDVQA figures are potentially contaminated. `ml/change_model/check_cdvqa_leakage.py` settles it (run on the training machine against `train_names.json`/`val_names.json`); until it has been run and reports no overlap, do not quote the CDVQA numbers for the learned model as held-out results.
-8. **Trained weights are not committed to this repository**: `best_change_model.pt` and `trained/data/` are produced on the training machine; the worker cannot start without them.
+7. **Possible train/test overlap on CDVQA (unverified)**: CDVQA's 968 test pairs are a *subset* of SECOND's 2,968 public pairs, and this model was trained on 2,000 of those 2,968 (1,700 train / 300 val; `trained/data/*_names.json`). 2,968 − 968 = 2,000 would be exactly what a deliberate exclusion of the CDVQA test pairs produces, but nothing in this repo confirms that (the data-preparation script is not committed), so it is unknown. `ml/change_model/check_cdvqa_leakage.py` settles it; until it has been run and reports no overlap, do not quote the CDVQA numbers for the learned model as held-out results.
+8. **Weights and split files** are committed under `ml/change_model/trained/` (`best_change_model.pt`, `change_training_log.json`, `data/{train,val}_names.json`, `data/meta.json`); the large `.npy` training arrays are not. Verified: the checkpoint loads strictly into the worker's architecture (4,874,241 parameters) and runs on CPU (~70–120 ms per 256×256 pair on an Apple-silicon CPU, one warm sample).
+9. **Unrelated artifacts in the same folder**: `best_model.pth`, `final_model.pth` and `training_log.json` come from an earlier, superseded training script (`train_change_detection.py`, a timm EfficientNet-B0 Siamese U-Net; still in git history at `ae6daf8`). They are **not** served by the worker and are not what this card describes.
