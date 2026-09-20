@@ -135,15 +135,20 @@ class TestChangeDetectionIntegration:
         body = resp.json()
 
         assert body["task_classified"] == "CHANGE_DETECTION"
-        # Learned model returns a binary mask; bounding_boxes may be None
+        assert body["bounding_boxes"], "Expected at least one change region"
         assert body["change_mask_url"] is not None
-        assert body["metadata"]["change_percentage"] is not None
+        assert body["metadata"]["change_percentage"] > 0
+        assert body["metadata"]["num_regions"] >= 1
         assert body["metadata"]["specialist"] == "change_detection"
-        assert "detected" in body["answer_text"] or "were detected" in body["answer_text"]
+        # The worker is stubbed unavailable (conftest), so the deterministic
+        # specialist is the one that executed — and the record must say so.
+        assert body["metadata"]["specialist_id"] == "change.deterministic_cv"
+        assert "were detected" in body["answer_text"]
 
         trace = body["execution_trace"]
         assert trace["selected_tool"] == "CHANGE_DETECTION"
         assert trace["execution_status"] == "completed"
+        assert trace["model_version"] is None
         assert trace["execution_time_ms"] is not None and trace["execution_time_ms"] >= 0
 
     def test_change_mask_url_is_retrievable(self):
@@ -159,8 +164,11 @@ class TestChangeDetectionIntegration:
         )
         body = resp.json()
         mask_url = body["change_mask_url"]
-        # Mask may be served from worker machine; check it was returned
         assert mask_url is not None
+
+        mask_resp = client.get(mask_url)
+        assert mask_resp.status_code == 200
+        assert len(mask_resp.content) > 0  # actual binary mask body
 
     def test_change_detection_result_is_persisted(self):
         before_id = upload_png_bytes(_solid_png((40, 40, 40)), modality="OPTICAL")
@@ -179,9 +187,9 @@ class TestChangeDetectionIntegration:
         body = get_resp.json()
         assert body["query_id"] == query_id
         assert body["task_classified"] == "CHANGE_DETECTION"
-        # Learned model returns a binary mask; bounding_boxes may be None
+        assert body["bounding_boxes"]
         assert body["change_mask_url"] is not None
-        assert body["metadata"]["change_percentage"] is not None
+        assert body["metadata"]["change_percentage"] > 0
         assert body["execution_trace"]["execution_status"] == "completed"
 
     def test_change_detection_with_one_image_rejected(self):

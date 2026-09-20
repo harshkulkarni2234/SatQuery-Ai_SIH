@@ -11,6 +11,7 @@ from app.models import Image, Query, QueryResult
 from app.schemas import QueryRequest, QueryResponse, ExecutionTrace
 from app.services.router import extract_grounding_target
 from app.services.planner import build_plan
+from app.services.registry import list_specialists
 from app.services.trace import TraceRecorder
 
 router = APIRouter(tags=["query"])
@@ -172,10 +173,13 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
                 "total_pixels": stats.get("total_pixels"),
                 "changed_area_m2": stats.get("changed_area_m2"),
                 "regions": stats.get("regions"),
-                "validation_failed": bool(specialist_result.warnings),
+                # Explicit flag from the specialist — NOT derived from
+                # warnings, which also carry benign notes (e.g. "learned
+                # model skipped, deterministic ran instead").
+                "validation_failed": bool(specialist_result.evidence.get("validation_failed")),
                 "registration_applied": stats.get("registration_applied"),
                 "alignment_method": stats.get("alignment_method"),
-                "reason": specialist_result.warnings[0] if specialist_result.warnings else None,
+                "reason": specialist_result.evidence.get("validation_reason"),
                 "specialist": "change_detection",
             }
 
@@ -293,8 +297,27 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
     )
     confidence_source = specialist_result.confidence_source if specialist_result else "unavailable"
     warnings = specialist_result.warnings if specialist_result else []
+    # The *planned* specialist is what the registry selected; the *executed*
+    # one is what actually produced the answer. They differ when the learned
+    # change model was planned but skipped at runtime, and the trace/DB must
+    # record the one that really ran.
+    executed_specialist_id = selected_entry.spec.id if selected_entry else None
+    if (
+        selected_entry is not None
+        and task == "CHANGE_DETECTION"
+        and specialist_result is not None
+        and specialist_result.model_or_tool != executed_specialist_id
+        and specialist_result.model_or_tool in {spec.id for spec in list_specialists()}
+    ):
+        executed_specialist_id = specialist_result.model_or_tool
+        top_meta["planned_specialist_id"] = selected_entry.spec.id
+        skipped = specialist_result.evidence.get("skipped_planned_reason")
+        top_meta["execution_note"] = (
+            f"Planned {selected_entry.spec.id} but ran {executed_specialist_id}"
+            + (f": {skipped}." if skipped else ".")
+        )
     if selected_entry is not None:
-        top_meta["specialist_id"] = selected_entry.spec.id
+        top_meta["specialist_id"] = executed_specialist_id
         top_meta["selection_reason"] = select_reason
         top_meta["rejected_specialists"] = rejected_specialists
         top_meta["used_fallback"] = used_fallback
@@ -330,7 +353,7 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         confidence_source=confidence_source,
         warnings=warnings,
         used_fallback=used_fallback,
-        specialist_id=selected_entry.spec.id if selected_entry else None,
+        specialist_id=executed_specialist_id,
     )
     db.add(query_record)
     db.flush()

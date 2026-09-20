@@ -48,7 +48,7 @@ def _always_available() -> bool:
     return True
 
 
-def _semantic_change_available() -> bool:
+def _learned_change_available() -> bool:
     return _change_worker_available()
 
 
@@ -123,21 +123,22 @@ _REGISTRY: list[RegistryEntry] = [
     ),
     RegistryEntry(
         spec=SpecialistSpec(
-            id="change.semantic_model",
+            id="change.siamese_binary_cnn",
             task="CHANGE_DETECTION",
-            name="Siamese CNN semantic change model",
+            name="Siamese CNN binary change model",
             kind="learned_model",
             input_count=2,
             modalities=["OPTICAL"],
             formats=["tif", "tiff", "png", "jpg", "jpeg", "bmp"],
+            outputs=["binary_change_mask"],
             confidence_available=False,
             version="siamese-cnn-v1",
             priority=5,
             is_fallback=False,
             is_rs_adapted=True,
         ),
-        handler=adapters.run_change_detection,
-        is_available=_semantic_change_available,
+        handler=adapters.run_learned_change,
+        is_available=_learned_change_available,
     ),
     RegistryEntry(
         spec=SpecialistSpec(
@@ -154,7 +155,7 @@ _REGISTRY: list[RegistryEntry] = [
             is_fallback=True,
             is_rs_adapted=False,
         ),
-        handler=adapters.run_change_detection,
+        handler=adapters.run_deterministic_change,
         is_available=_always_available,
     ),
     RegistryEntry(

@@ -53,7 +53,11 @@ export default function TraceReplay({ result, onDone }) {
 
   const plan = result?.metadata?.plan || {};
   const rejected = plan.rejected_specialists || [];
-  const specialistId = plan.selected_specialist_id;
+  // Show the specialist that actually ran; the plan only records what was
+  // selected up front. They differ when a planned learned model was skipped.
+  const specialistId = result?.metadata?.specialist_id || plan.selected_specialist_id;
+  const plannedId = result?.metadata?.planned_specialist_id;
+  const executionNote = result?.metadata?.execution_note;
   const usedFallback = result?.used_fallback;
 
   const visible = events.slice(0, revealCount);
@@ -71,7 +75,11 @@ export default function TraceReplay({ result, onDone }) {
                 Specialist selected: <strong>{winnerName}</strong>
               </div>
               {specialistId && (
-                <div className="trace-winner-sub">{fmtSpecialistId(specialistId)}</div>
+                <div className="trace-winner-sub">
+                  {plannedId
+                    ? `${fmtSpecialistId(specialistId)} (planned: ${fmtSpecialistId(plannedId)})`
+                    : fmtSpecialistId(specialistId)}
+                </div>
               )}
             </div>
           </div>
@@ -79,7 +87,11 @@ export default function TraceReplay({ result, onDone }) {
           {usedFallback && (
             <div className="fallback-badge">
               Used fallback
-              {plan.selection_reason ? `: ${plan.selection_reason}` : ""}
+              {executionNote
+                ? `: ${executionNote}`
+                : plan.selection_reason
+                  ? `: ${plan.selection_reason}`
+                  : ""}
             </div>
           )}
 

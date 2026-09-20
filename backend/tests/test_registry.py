@@ -7,7 +7,7 @@ def test_list_specialists_returns_all_specs():
     assert "vqa.smolvlm_base" in ids
     assert "vqa.smolvlm_bigearthnet_lora_stage3" in ids
     assert "grounding.deterministic_cv" in ids
-    assert "change.semantic_model" in ids
+    assert "change.siamese_binary_cnn" in ids
     assert "change.deterministic_cv" in ids
     assert "cross_modal.feature_fusion" in ids
 
@@ -23,7 +23,7 @@ def test_candidates_for_change_detection_two_images():
         "CHANGE_DETECTION", [{"modality": "OPTICAL"}, {"modality": "OPTICAL"}]
     )
     ids = {c.spec.id for c in candidates}
-    assert ids == {"change.semantic_model", "change.deterministic_cv"}
+    assert ids == {"change.siamese_binary_cnn", "change.deterministic_cv"}
 
 
 def test_select_grounding_returns_deterministic_cv():
@@ -34,7 +34,7 @@ def test_select_grounding_returns_deterministic_cv():
 
 
 def test_select_change_detection_falls_back_to_deterministic(monkeypatch):
-    """When change.semantic_model worker is unavailable, selection
+    """When change.siamese_binary_cnn worker is unavailable, selection
     must fall back to the deterministic specialist with a reason."""
     monkeypatch.setattr(registry, "_change_worker_available", lambda: False)
     entry, reason, rejected = registry.select(
@@ -43,8 +43,8 @@ def test_select_change_detection_falls_back_to_deterministic(monkeypatch):
     assert entry.spec.id == "change.deterministic_cv"
     assert entry.spec.is_fallback is True
     rejected_ids = {r["id"] for r in rejected}
-    assert "change.semantic_model" in rejected_ids
-    unavailable_reasons = [r["reason"] for r in rejected if r["id"] == "change.semantic_model"]
+    assert "change.siamese_binary_cnn" in rejected_ids
+    unavailable_reasons = [r["reason"] for r in rejected if r["id"] == "change.siamese_binary_cnn"]
     assert unavailable_reasons and "unavailable" in unavailable_reasons[0]
 
 

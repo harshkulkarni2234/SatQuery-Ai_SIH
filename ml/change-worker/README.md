@@ -11,10 +11,16 @@ dependency-light.
 ```
 React Frontend -> FastAPI Backend (backend/) --HTTP--> Change Worker (this dir) -> Siamese CNN
 ```
-The backend never imports torch. Its `app/services/change_detection.py`
-falls back to the deterministic pixel-diff approach if the worker is
-unreachable; when the worker IS reachable, the backend calls
-`POST /change` to get a learned change mask.
+The backend never imports torch. When the worker is reachable and the
+image pair is inside the model's training domain, the backend's
+`change.siamese_binary_cnn` specialist (`backend/app/services/change_specialists.py`)
+calls `POST /change` and stores the returned mask itself. Otherwise — worker
+down, invalid response, size mismatch, coarse imagery, non-corresponding
+pair — it runs the deterministic pixel-difference method and reports that
+fallback in the result.
+
+**Scope:** the model is a *binary* change/no-change segmenter. It says where
+pixels changed, not what they changed to. See `ml/change_model/MODEL_CARD.md`.
 
 ## 3. Create the separate venv
 The worker uses its OWN virtual environment — never the backend venv.
@@ -60,12 +66,15 @@ the worker still runs, just far slower.
 {
   "model_version": "siamese-cnn-v1",
   "latency_ms": 1234,
-  "mask_path": "change_mask_1234.png"
+  "mask_png_base64": "<base64 PNG>",
+  "mask_width": 256,
+  "mask_height": 256
 }
 ```
-`mask_path` points to the saved binary change mask PNG (256x256, uint8
-0/1). The mask is also returned as the `mask` field internally; the
-`mask_path` is the on-disk location for the backend to serve.
+The mask is a single-channel PNG at the model's 256x256 working resolution,
+values 0 (unchanged) / 255 (changed). The worker writes no files: uploaded
+images go to the OS temp dir and are deleted after the request; the backend
+saves the mask under its own served `/masks` directory.
 
 ## 7. Model
 The model is a small Siamese CNN encoder + feature difference/fusion
@@ -76,10 +85,9 @@ module + decoder, trained on the SECOND-derived dataset
 RTX 2050). Model version: `siamese-cnn-v1`.
 
 ## 8. GPU requirement / limitations
-- Needs a real GPU for reasonable latency: a CUDA GPU (fp16) or
-  Apple Silicon via PyTorch's MPS backend. `model_provider.py`
-  auto-detects CUDA, then falls back to CPU. On CPU it technically
-  runs but is far slower.
+- Needs a CUDA GPU for reasonable latency. `model_provider.py`
+  auto-detects CUDA (fp16) and otherwise uses CPU (fp32), which runs but is
+  far slower. There is no MPS (Apple Silicon) path.
 - Requests are processed **serially** (single inference slot) — no
   parallelism.
 - No retraining at request time, and this service will NOT fetch any

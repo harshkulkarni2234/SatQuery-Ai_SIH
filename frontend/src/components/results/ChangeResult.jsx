@@ -6,6 +6,8 @@ import ViewerToggles from "../common/ViewerToggles.jsx";
 import OverlayImage from "../common/OverlayImage.jsx";
 import Stat from "../common/Stat.jsx";
 
+const LEARNED_CHANGE_ID = "change.siamese_binary_cnn";
+
 const ALIGNMENT_LABEL = {
   geographic_reprojection: "Geographic reprojection (real CRS/grid alignment)",
   phase_correlation: "Phase-correlation translation alignment",
@@ -24,8 +26,14 @@ export default function ChangeResult({ result, images }) {
 
   const specialists = useSpecialists();
   const spec = findSpecialist(specialists, meta.specialist_id);
-  const methodLabel =
-    spec?.kind === "learned_model" ? "Semantic model used" : "Pixel-level deterministic method";
+  // The specialist that actually EXECUTED (metadata.specialist_id), not the one
+  // that was planned — a runtime fallback lands on the deterministic method.
+  const learned = spec
+    ? spec.kind === "learned_model"
+    : meta.specialist_id === LEARNED_CHANGE_ID;
+  const methodLabel = learned
+    ? "Learned Siamese CNN · binary change / no-change"
+    : "Pixel-level deterministic method";
 
   if (unavailable) {
     return (
@@ -63,7 +71,8 @@ export default function ChangeResult({ result, images }) {
             ...(result.overlay_url
               ? [{ value: "overlay", label: "Change overlay" }]
               : []),
-            { value: "annotated", label: "Changed regions" },
+            // The learned model produces a mask only — no region boxes exist.
+            ...(learned ? [] : [{ value: "annotated", label: "Changed regions" }]),
             { value: "plain", label: "Before / After" },
             { value: "mask", label: "Change mask" },
           ]}
@@ -77,8 +86,9 @@ export default function ChangeResult({ result, images }) {
               </figure>
             )}
             <p className="mask-explainer">
-              Highlighted pixels in the change mask represent detected
-              differences according to the current deterministic method.
+              {learned
+                ? "Highlighted pixels are where the learned model predicts change. The mask says where, not what: it does not identify the type of change."
+                : "Highlighted pixels in the change mask represent detected differences according to the deterministic pixel-difference method."}
             </p>
           </div>
         ) : viewer === "overlay" && result.overlay_url ? (
@@ -116,6 +126,7 @@ export default function ChangeResult({ result, images }) {
       <div className="report-section">
         <h3 className="result-section-title">Change statistics</h3>
         <div className="method-badge">{methodLabel}</div>
+        {meta.execution_note && <p className="note evidence-note">{meta.execution_note}</p>}
         <div className="stat-grid">
           <Stat
             label="Changed area"
@@ -162,9 +173,9 @@ export default function ChangeResult({ result, images }) {
           </>
         )}
         <p className="note evidence-note">
-          Change statistics are measured from the cleaned pixel-difference mask;
-          they describe pixel-level visual differences, not semantic change.
-          Field verification is recommended before operational use.
+          {learned
+            ? "Change statistics are measured from the model's binary mask at its 256×256 working resolution. The model marks where pixels changed, not what they changed to, and was trained on 0.5–3 m aerial imagery, so results on other imagery are unvalidated. Field verification is recommended before operational use."
+            : "Change statistics are measured from the cleaned pixel-difference mask; they describe pixel-level visual differences, not semantic change. Field verification is recommended before operational use."}
         </p>
       </div>
 

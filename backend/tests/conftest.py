@@ -37,6 +37,17 @@ def _cleanup_db_and_files():
                 pass
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_change_worker(monkeypatch):
+    """The suite must not depend on whether a real change worker happens to be
+    running on :8002 (it would silently change which specialist executes).
+    Default: worker unavailable -> deterministic path. Tests that exercise the
+    learned path re-enable it and stub the worker HTTP call themselves."""
+    from app.services import registry
+
+    monkeypatch.setattr(registry, "_change_worker_available", lambda: False)
+
+
 @pytest.fixture(scope="module")
 def uploaded_image_id():
     """Upload a tiny valid PNG and return its image_id."""

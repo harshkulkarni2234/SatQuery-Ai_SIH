@@ -13,7 +13,7 @@ from torch import nn
 from PIL import Image
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "change_model", "trained")
-MODEL_PATH = os.path.join(MODEL_DIR, "best_change_model.pt")
+MODEL_PATH = os.getenv("MODEL_PATH") or os.path.join(MODEL_DIR, "best_change_model.pt")
 MODEL_VERSION = "siamese-cnn-v1"
 IMG_SIZE = 256
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)

@@ -60,7 +60,7 @@ def test_change_detection_plan_selects_deterministic_fallback(monkeypatch):
     assert plan.compatibility is not None
     assert plan.compatibility.ok is True
     assert plan.selected_specialist_id == "change.deterministic_cv"
-    assert any(r["id"] == "change.semantic_model" for r in plan.rejected_specialists)
+    assert any(r["id"] == "change.siamese_binary_cnn" for r in plan.rejected_specialists)
 
 
 def test_change_detection_same_date_rejected_by_fast_classifier():

@@ -12,7 +12,7 @@ from app.routes.query import router as query_router
 from app.routes.report import router as report_router
 from app.routes.specialists import router as specialists_router
 from app.services.change_detection import MASK_DIR
-from app.services.registry import _semantic_change_available, _vqa_worker_available
+from app.services.registry import _learned_change_available, _vqa_worker_available
 
 os.makedirs(MASK_DIR, exist_ok=True)
 
@@ -62,10 +62,10 @@ def _db_available() -> bool:
 def health_check():
     db_ok = _db_available()
     vqa_ok = _vqa_worker_available()
-    semantic_change_ok = _semantic_change_available()
+    learned_change_ok = _learned_change_available()
     return {
         "status": "ok" if db_ok else "degraded",
         "database": "up" if db_ok else "down",
         "vqa_worker": "up" if vqa_ok else "down",
-        "semantic_change_model": "available" if semantic_change_ok else "unavailable",
+        "learned_change_model": "available" if learned_change_ok else "unavailable",
     }
