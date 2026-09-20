@@ -254,6 +254,30 @@ class TestStubs:
         assert body["metadata"]["specialist"] == "vqa"
         assert body["metadata"]["specialist_mode"] == "base"
 
+    def test_vqa_lora_answer_is_recorded_as_the_executed_specialist(self, monkeypatch):
+        """The worker routes some questions to its LoRA specialist internally;
+        the trace must name the specialist that answered, without inventing a
+        'planned but not used' fallback story (this routing is by design)."""
+        from app.services import vqa as vqa_module
+
+        image_id = upload_png_bytes(_solid_png((120, 120, 60)), modality="OPTICAL")
+        monkeypatch.setattr(vqa_module, "answer_question", lambda image_path, query_text: {
+            "answer_text": "yes",
+            "model_version": "smolvlm256m-ben-lora-s3-v2.0",
+            "specialist": True,
+            "confidence_score": None,
+            "execution_time_ms": 40,
+            "error": False,
+        })
+
+        body = client.post(
+            "/query", json={"query_text": "Is there water in the image?", "image_ids": [image_id]}
+        ).json()
+        meta = body["metadata"]
+        assert meta["specialist_id"] == "vqa.smolvlm_bigearthnet_lora_stage3"
+        assert "planned_specialist_id" not in meta and "execution_note" not in meta
+        assert body["used_fallback"] is False
+
     def test_vqa_target_query_never_fabricates_boxes(self, monkeypatch):
         """Object-specific VQA questions get real deterministic grounding boxes
         when the object is detectable — and none otherwise."""

@@ -252,7 +252,7 @@ Known limitations, stated honestly rather than hidden:
 - The deterministic change method measures **pixel-level visual differences**, not semantic land-cover change (no autonomous "building constructed" claims), and never estimates changed area when pixel resolution is unknown. The learned change model is binary only — it does not say *what* changed either.
 - GPU: the VQA worker was verified on an Apple M2 (PyTorch MPS). The LoRA adapter v2.0 and the change model were trained on a separate Windows laptop with an NVIDIA RTX 2050 (CUDA, fp16). A GPU was never the blanket blocker earlier drafts of this README implied.
   - **Learned change model:** real and trained, but binary-only and trained on a small split (1,700 train / 300 val; val F1 0.468, IoU 0.327). On CDVQA (120-question sample) it produced parseable percentages more often than the deterministic baseline, but the sample is small and the overall numbers are not like-for-like — see `ml/change_model/MODEL_CARD.md`. A train/test leakage check was run (`ml/change_model/check_cdvqa_leakage.py`): none of CDVQA's 968 test pairs were in the model's training or validation images, though the evaluation is still in-distribution (same SECOND imagery source).
-  - **BigEarthNet LoRA adapter v2.0 (Phase B2):** trained on official BigEarthNet v2.0 labels matched to the local `testing/` patches (25,645 QA pairs; 2,400 rows / 450 steps actually trained). Its RSVQA-LR result (60 questions per type) is **mixed** versus the base model with no adapter, not a clear improvement: rural/urban 61.7% vs 40.7%, comparison 70.0% vs 65.0%, presence 70.0% vs 73.3%, and count answers have a meaningless RMSE (2.26M, outliers) with only 2/39 exact — see `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`. The adapter weights are not committed; the served default is `ml/smolvlm/lora_stage3_v2`.
+  - **BigEarthNet LoRA adapter v2.0 (Phase B2):** trained on official BigEarthNet v2.0 labels matched to the local `testing/` patches (25,645 QA pairs; 2,400 rows / 450 steps actually trained). Its RSVQA-LR result (60 questions per type) is **mixed** versus the base model with no adapter, not a clear improvement: rural/urban 61.7% vs 40.7%, comparison 70.0% vs 65.0%, presence 70.0% vs 73.3%, and count answers have a meaningless RMSE (2.26M, outliers) with only 2/39 exact — see `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`. The adapter weights (9.8 MB) are committed and the served default is `ml/smolvlm/lora_stage3_v2`; the legacy v1.0 adapter's weights are not in the repo.
   - **Benchmarks (Phases B3–B6, B10):** real seeded-sample runs exist for RSVQA-LR, CDVQA and VRSBench (VQA, referring, captioning); they are samples, not full test sets — see the tables in `evaluation/README.md`. There is no `docs/EVALUATION.md`; see `docs/SOLO_PROGRESS.md` for the status of every phase.
 - Optical ↔ SAR **spatial correspondence is never claimed** unless verified from real file metadata (matching CRS + transform); the cross-modal result reports per-sensor/per-class attribution and states honestly when correspondence is unverified, even for a pair that is genuinely co-registered by construction but ships without embedded georeferencing (see `data/demo/scenario_C_optical_sar/README.md`).
 - Display-region caps are enforced for readability (up to 10 grounding boxes; up to 8 per-sensor cross-modal regions).
@@ -298,7 +298,7 @@ satquery-ai/
 │   ├── change-worker/              # separate change-detection worker (Siamese CNN), :8002
 │   ├── change_model/               # training script, model card, selection notes, trained weights + split files
 │   ├── smolvlm/lora_stage3/        # legacy BigEarthNet LoRA adapter (v1.0, unknown provenance)
-│   ├── smolvlm/lora_stage3_v2/     # current LoRA adapter v2.0 config/logs (weights not committed)
+│   ├── smolvlm/lora_stage3_v2/     # current LoRA adapter v2.0 adapter weights, config, logs
 │   └── data/                       # demo-data fetch scripts (e.g. download_lakemead_temporal_pair.py)
 ├── frontend/                       # React (Vite) single-page app
 │   ├── src/                        # App.jsx, api.js, components/, constants/, lib/
@@ -326,8 +326,7 @@ frontend/report/demo) — see `docs/satquery-master-build-spec.md` for the
 original plan and `docs/SOLO_PROGRESS.md` for exactly which phases are
 done, deferred, or blocked, and the real reason for each. Two models
 (the change model and the LoRA v2.0 adapter) were trained on a separate
-RTX 2050 laptop; the change model's weights are committed, the LoRA v2.0
-adapter weights are not yet. Nothing above claims work that file doesn't corroborate.
+RTX 2050 laptop; both models' weights are committed. Nothing above claims work that file doesn't corroborate.
 
 ## License
 

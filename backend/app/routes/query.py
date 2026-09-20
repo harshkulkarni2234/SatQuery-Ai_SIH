@@ -298,24 +298,25 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
     confidence_source = specialist_result.confidence_source if specialist_result else "unavailable"
     warnings = specialist_result.warnings if specialist_result else []
     # The *planned* specialist is what the registry selected; the *executed*
-    # one is what actually produced the answer. They differ when the learned
-    # change model was planned but skipped at runtime, and the trace/DB must
-    # record the one that really ran.
+    # one is what actually produced the answer, and the trace/DB must record
+    # the one that really ran. They differ when (a) the learned change model
+    # was planned but skipped at runtime (a reported fallback), or (b) the VQA
+    # worker routed a question to its LoRA specialist internally (by design,
+    # not a fallback — no planned/note fields in that case).
     executed_specialist_id = selected_entry.spec.id if selected_entry else None
     if (
         selected_entry is not None
-        and task == "CHANGE_DETECTION"
         and specialist_result is not None
         and specialist_result.model_or_tool != executed_specialist_id
         and specialist_result.model_or_tool in {spec.id for spec in list_specialists()}
     ):
         executed_specialist_id = specialist_result.model_or_tool
-        top_meta["planned_specialist_id"] = selected_entry.spec.id
         skipped = specialist_result.evidence.get("skipped_planned_reason")
-        top_meta["execution_note"] = (
-            f"Planned {selected_entry.spec.id} but ran {executed_specialist_id}"
-            + (f": {skipped}." if skipped else ".")
-        )
+        if skipped:
+            top_meta["planned_specialist_id"] = selected_entry.spec.id
+            top_meta["execution_note"] = (
+                f"Planned {selected_entry.spec.id} but ran {executed_specialist_id}: {skipped}."
+            )
     if selected_entry is not None:
         top_meta["specialist_id"] = executed_specialist_id
         top_meta["selection_reason"] = select_reason

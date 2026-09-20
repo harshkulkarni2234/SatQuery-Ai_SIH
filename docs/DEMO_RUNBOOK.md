@@ -189,7 +189,7 @@ summary with the specific step that failed if something's wrong.
   model, not a clear win: rural/urban 61.7% vs 40.7% and comparison 70.0%
   vs 65.0%, but presence 70.0% vs 73.3%, and counting is still unreliable
   (2/39 exact, 21 unparseable). Its
-  adapter weights are not committed to the repo. See
+  adapter weights are committed (`fc0fd2e`). See
   `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`.
 - Real benchmark runs exist for RSVQA-LR, CDVQA and VRSBench (three tasks),
   each on a seeded sample, not the full test sets — see
