@@ -173,6 +173,42 @@ question"` — some of CDVQA's real question phrasings don't trigger
 SatQuery's keyword-based change-detection routing at all, a second real
 routing gap alongside the semantic one.
 
+### v2 re-runs (after training the change model and the BigEarthNet LoRA v2.0 adapter)
+
+Both re-runs use the same seeded samples as the baselines above. Files:
+`results/rsvqa_lr_score_v2.json`, `results/cdvqa_score_v2.json`.
+
+**RSVQA-LR, LoRA v2.0 vs base model (60 questions/type):**
+
+| Type | Base (v1) | LoRA v2.0 |
+|---|---|---|
+| rural_urban | 40.7% (59 scored) | **61.7%** (60 scored) |
+| presence | **73.3%** | 70.0% |
+| comp | 65.0% | **70.0%** |
+| count | 0% exact (34 scored, 26 unparseable), RMSE 206.6 | 5.1% exact (2/39 scored, 21 unparseable), RMSE 2,264,550 |
+
+Mixed: better on two types, slightly worse on presence, and counting is
+still unreliable (the v2 RMSE is dominated by huge outliers and is not
+meaningful). With 60 questions per type, a few points either way is within
+sampling noise — this is **not** evidence the adapter is generally better.
+
+**CDVQA, learned binary change model vs deterministic baseline (120
+questions, 19 errors in both):** all three yes/no types and all three
+categorical types are still 0 scored — the model states aggregate change,
+not a verdict or a land-cover class. Only the two percentage-bucket types
+can be scored: `change_ratio` 30.8% (4/13) vs 14.3% (1/7), and
+`change_ratio_types` 33.3% (5/15) vs 37.5% (3/8). The reported "overall"
+figure (0.321 vs 0.267) is computed over scored answers only — 9/28 vs 4/15
+— so it is not a like-for-like comparison, and the per-type differences are
+within noise at these sample sizes. The v2 run predates the change
+specialist's honesty hardening (new answer wording, domain gating, no
+worker-side files); re-run it to refresh. **Possible contamination:** CDVQA's
+968 test pairs are a subset of SECOND's 2,968 pairs and the change model was
+trained on 2,000 of those, so many evaluated images may have been seen in
+training unless data prep excluded them. Not yet checked — run
+`ml/change_model/check_cdvqa_leakage.py` (it also reports how many of the
+120 evaluated pairs were unseen) before treating these numbers as held-out.
+
 ## Real labeled benchmark: VRSBench (VQA, referring/grounding, captioning)
 
 **Source**: official HuggingFace dataset

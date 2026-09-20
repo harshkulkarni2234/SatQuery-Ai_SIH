@@ -36,7 +36,17 @@ hide.
    worker's own `http://127.0.0.1:8001/health` reports which device it
    loaded onto — verified for real on this dev machine as `"device":
    "mps"` (Apple M2 GPU), not `"cpu"` — see `ml/vqa-worker/README.md`.
-4. **Frontend** (from `frontend/`):
+4. **Change worker** (optional — only if the trained weights
+   `ml/change_model/trained/best_change_model.pt` are present on this machine
+   and `ml/change-worker/venv` exists; see `ml/change-worker/README.md`):
+   ```bash
+   cd ml/change-worker
+   venv/bin/python -m uvicorn worker_service:app --host 127.0.0.1 --port 8002
+   ```
+   (Windows: `.\run_worker.ps1`.) `/health` should then report
+   `"learned_change_model": "available"`. Without it, change queries run the
+   deterministic pixel-difference method and are flagged as a fallback.
+5. **Frontend** (from `frontend/`):
    ```bash
    npm run dev
    ```
@@ -46,7 +56,7 @@ hide.
    production demo, set `VITE_ENABLE_DEMO_SCENARIOS=true` before
    `npm run build` to keep it visible).
 
-Run `scripts/smoke_test.sh` (or `.ps1` on Windows) after step 4 to confirm
+Run `scripts/smoke_test.sh` (or `.ps1` on Windows) after step 5 to confirm
 the whole stack end-to-end before judges arrive — see section 5.
 
 ## 2. Per-scenario click-path and expected output
@@ -61,7 +71,7 @@ pre-baked. Click **Analyze** yourself after it loads.
 |---|---|---|
 | **Single image** — "What can you tell me about this image?" | Load card → Analyze → View Analysis | VQA specialist (SmolVLM if the worker is up, else an honest "unavailable" fallback answer) describing the scene. |
 | **Single image** — "Show me the water body." | Load card → Analyze → View Analysis | Grounding specialist (deterministic CV) draws a bounding box over the river/water region with a real confidence score (bbox fill ratio), not a learned-model guess. |
-| **Temporal pair (Lake Mead)** — "What changed between these two dates?" | Load card → Analyze → View Analysis | Change Detection (deterministic CV + real geographic reprojection). Real output as verified in this session: **~5.6% of the frame changed (~7,776,900 m²)**, largest change in the upper-left, alignment method "geographic reprojection" (both files are real georeferenced Sentinel-2 GeoTIFFs, CRS EPSG:32611, 10 m resolution). |
+| **Temporal pair (Lake Mead)** — "What changed between these two dates?" | Load card → Analyze → View Analysis | Change Detection (deterministic CV + real geographic reprojection — the learned Siamese model is deliberately skipped for this pair because 10 m/pixel is outside its 0.5–3 m training domain, and the result is flagged as a fallback if the change worker is up). Real output as verified in this session: **~5.6% of the frame changed (~7,776,900 m²)**, largest change in the upper-left, alignment method "geographic reprojection" (both files are real georeferenced Sentinel-2 GeoTIFFs, CRS EPSG:32611, 10 m resolution). |
 | **Optical + SAR pair** — "Use the optical and SAR images together to identify built-up and water-covered regions." | Load card → Analyze → View Analysis | Cross-Modal fusion. Per-class attribution legend (optical-only / SAR-only / combined) and a **"Co-registration unverified — evidence is reported per sensor, not pixel-aligned"** banner (see limitations below — this is correct, expected behavior for this specific pair, not an error). |
 
 ## 3. What to say to judges about each honest limitation
@@ -114,15 +124,22 @@ or 500s (see `docs/HARDENING_REPORT.md`). To demonstrate this live:
    is already watching, no scripted alternate screen needed.
 4. Restart the worker afterward if you need VQA again for later scenarios.
 
-For **change detection**, the deterministic CV path has no external worker
-dependency — a real pretrained semantic change model (TinyCD) was
-researched and was ready to integrate on this machine's GPU, but was
-deliberately not integrated (license + scope reasons, see
-`docs/SOLO_PROGRESS.md` phase B8 and `ml/change_model/SELECTION.md`), so
-there's no "worker down" failure mode to demonstrate for this specialist;
-its honest-limitation moment is the "spatial correspondence could not be
-verified" refusal already covered above when a non-georeferenced pair is
-used for change detection instead of scenario B's real GeoTIFFs.
+For **change detection**, there are two specialists. `change.siamese_binary_cnn`
+is a learned binary change/no-change model served by the optional change
+worker (`ml/change-worker/`, port 8002, needs its own venv and the trained
+weights, which are not committed to the repo). `change.deterministic_cv`
+needs no worker and is always available. To demonstrate the honest fallback
+live: with the change worker running, run a change query, then stop the
+worker (Ctrl+C) and re-run it. Expected: the query still returns 200, the
+answer now comes from the deterministic method, and the UI shows a
+"Used fallback" badge with the reason (and `/health` reports
+`"learned_change_model": "unavailable"`). If the worker is not running at
+all, the deterministic method runs from the start (also flagged as a
+fallback). The learned model is skipped, with the reason shown, for
+size-mismatched pairs, pairs known to be coarser than 3 m/pixel, and
+non-corresponding pairs; the deterministic "spatial correspondence could not
+be verified" refusal (non-georeferenced pair vs scenario B's real GeoTIFFs)
+still applies as before.
 
 ## 5. Smoke test
 
@@ -154,30 +171,29 @@ summary with the specific step that failed if something's wrong.
 
 ## 7. Known, deliberate scope limits (say these plainly if asked)
 
-- The semantic (learned-model) change-detection specialist (Phase B8) was
-  not integrated — **not a hardware limitation**. This machine's GPU
-  (Apple M2, via PyTorch MPS) was verified working for real model
-  inference (the VQA worker actually runs SmolVLM on it). Three real
-  pretrained change-detection models were researched (TinyCD, BIT_CD,
-  ChangeFormer — see `ml/change_model/SELECTION.md`); TinyCD was ready to
-  integrate (2.4MB weights, runs fine on this GPU) but was deliberately
-  skipped because its license is non-commercial/research-only and none of
-  the three candidates output true semantic class labels anyway (all are
-  binary change/no-change). `change.deterministic_cv` is always the
-  specialist that actually runs today, and the system reports this
-  honestly via `used_fallback` rather than pretending a semantic model
-  exists.
-- The BigEarthNet LoRA fine-tuning run (Phase B2) is incomplete because
-  no labeled BigEarthNet training data exists in this build (`testing/`
-  has zero label files) — also not a GPU limitation. What IS real: the
-  existing Stage-3 adapter was verified to load and run correctly on this
-  GPU (previously untested), and a real base-vs-specialist comparison was
-  recorded — see `ml/adaptation/MODEL_CARD.md`.
-- Full evaluation-scale benchmark runs against RSVQA/CDVQA/VRSBench
-  (Phases B3–B6, B10) were not completed — by explicit direction to use
-  the local `testing/` folder instead, which itself has no labels to
-  score accuracy against either. See `docs/SOLO_PROGRESS.md` and
-  `evaluation/README.md` for the exact scope decision and what a real,
-  unlabeled run against `testing/` actually produced. `docs/EVALUATION.md`
-  does not exist for this build; do not reference it or invent numbers.
+- The learned change model is **binary** change/no-change only: it says
+  where pixels changed, never what they changed to, and it does not
+  classify land cover. It is an original small Siamese CNN (~4.9M params)
+  trained on a SECOND-derived split (1,700 train / 300 val; val F1 0.468,
+  IoU 0.327), 0.5–3 m aerial RGB only. The SECOND dataset's license is
+  unstated, so treat the model as research-only. Its trained weights are
+  not committed, and its CDVQA numbers are potentially contaminated: the
+  CDVQA test pairs are a subset of the SECOND pairs it trained on, and the
+  overlap check (`ml/change_model/check_cdvqa_leakage.py`) has not been run
+  yet — see `ml/change_model/MODEL_CARD.md` (Known Limitations 7–8).
+- The CDVQA numbers for it are a small sample (13–15 questions per type)
+  and not like-for-like with the deterministic baseline, and possibly on
+  images it trained on — don't quote them as an improvement or as held-out
+  results (`evaluation/README.md`).
+- The BigEarthNet LoRA adapter v2.0 is real (trained on official
+  BigEarthNet v2.0 labels), but its RSVQA-LR results (60 questions/type) are **mixed** versus the base
+  model, not a clear win: rural/urban 61.7% vs 40.7% and comparison 70.0%
+  vs 65.0%, but presence 70.0% vs 73.3%, and counting is still unreliable
+  (2/39 exact, 21 unparseable). Its
+  weights are not committed to the repo either. See
+  `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`.
+- Real benchmark runs exist for RSVQA-LR, CDVQA and VRSBench (three tasks),
+  each on a seeded sample, not the full test sets — see
+  `evaluation/README.md` for the sample sizes and caveats. There is no
+  `docs/EVALUATION.md`; do not reference it or invent numbers.
 - Scenario A's single image has unconfirmed provenance (documented above).

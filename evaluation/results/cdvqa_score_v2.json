@@ -1,8 +1,8 @@
 {
   "benchmark": "CDVQA (real official test split, over SECOND dataset images)",
   "dataset": "https://github.com/YZHJessica/CDVQA (Apache-2.0 labels) + https://captain-whu.github.io/SCD/ (images, license unstated)",
-  "model": "change.semantic_model (Siamese CNN, siamese-cnn-v1)",
-  "note": "SatQuery's change specialist measures aggregate pixel/area change, not per-land-cover-class semantic change. Low scores on categorical question types (smallest/largest/change_to_what) are an expected, honest capability gap, not a bug \u2014 exactly what a real semantic change model (Phase B8) would need to close.",
+  "model": "change.siamese_binary_cnn (Siamese CNN, binary change/no-change, siamese-cnn-v1) \u2014 id was 'change.semantic_model' when this run was made",
+  "note": "SatQuery's change specialists measure aggregate change coverage, not per-land-cover-class semantic change; the learned Siamese CNN is a BINARY change/no-change model. Low scores on categorical question types (smallest/largest/change_to_what) are an expected, honest capability gap, not a bug \u2014 closing it needs a per-class (semantic) change model, which this project has not trained.",
   "n_total_rows": 120,
   "n_errors": 19,
   "by_question_type": {
@@ -75,5 +75,9 @@
     }
   },
   "approx_overall_accuracy": 0.32142857142857145,
-  "date": "2026-09-19T12:16:33.430537+00:00"
+  "approx_overall_accuracy_note": "Computed over SCORED answers only; the deterministic baseline scored 15 answers (4 correct) and this run scored 28 (9 correct), so the two overall numbers are not like-for-like. Per-type n is 13-15, so single-type differences are within sampling noise.",
+  "n_scored_total": 28,
+  "date": "2026-09-19T12:16:33.430537+00:00",
+  "evaluated_with": "Change-specialist implementation as of commits c4a5fda/ecd5116 (before the honesty hardening: older answer wording, no domain gating). Re-run to refresh against the current code.",
+  "possible_contamination": "CDVQA's 968 test pairs are a subset of SECOND's 2,968 pairs and the change model was trained on 2,000 of them; unless data prep excluded the CDVQA test pairs, some evaluated images were seen in training. Not yet checked (ml/change_model/check_cdvqa_leakage.py)."
 }

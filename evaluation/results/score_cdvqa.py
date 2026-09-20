@@ -58,8 +58,8 @@ def score(path: str) -> dict:
             n_errors += 1
             continue
         answer = r.get("answer_text", "")
-        if "Learned Siamese CNN" in answer:
-            model_name = "change.semantic_model (Siamese CNN, siamese-cnn-v1)"
+        if "learned siamese cnn" in answer.lower():
+            model_name = "change.siamese_binary_cnn (Siamese CNN, binary change/no-change, siamese-cnn-v1)"
         meta = r.get("meta") or {}
         if not meta.get("ground_truth_available"):
             continue
@@ -99,15 +99,20 @@ def score(path: str) -> dict:
         "dataset": "https://github.com/YZHJessica/CDVQA (Apache-2.0 labels) + "
                    "https://captain-whu.github.io/SCD/ (images, license unstated)",
         "model": model_name,
-        "note": "SatQuery's change specialist measures aggregate pixel/area change, not "
+        "note": "SatQuery's change specialists (deterministic pixel-difference and the "
+                "learned binary Siamese CNN) both measure aggregate change coverage, not "
                 "per-land-cover-class semantic change. Low scores on categorical question "
                 "types (smallest/largest/change_to_what) are an expected, honest capability "
-                "gap, not a bug — exactly what a real semantic change model (Phase B8) would "
-                "need to close.",
+                "gap, not a bug — closing it needs a per-class (semantic) change model, which "
+                "this project has not trained.",
         "n_total_rows": len(rows),
         "n_errors": n_errors,
         "by_question_type": results,
         "approx_overall_accuracy": (overall_correct / overall_scored) if overall_scored else None,
+        "approx_overall_accuracy_note": "Computed over SCORED answers only (n_scored_total). "
+                "Unparseable answers are excluded, so this is not comparable across runs "
+                "whose n_scored_total differs.",
+        "n_scored_total": overall_scored,
         "date": datetime.now(timezone.utc).isoformat(),
     }
 

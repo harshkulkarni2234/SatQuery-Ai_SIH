@@ -8,6 +8,7 @@ build/
 *.egg
 
 # Virtual environments
+pyvenv.cfg
 venv/
 venv_mac/
 .venv/

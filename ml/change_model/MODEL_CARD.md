@@ -4,14 +4,14 @@
 
 | Field | Value |
 |---|---|
-| **Model ID** | `change.semantic_model` |
+| **Registry ID** | `change.siamese_binary_cnn` (was `change.semantic_model` until the id was renamed — the model is binary, not semantic) |
 | **Model Version** | `siamese-cnn-v1` |
 | **Artifact** | `ml/change_model/trained/best_change_model.pt` |
 | **Training Script** | `ml/change_model/train_change.py` |
 | **Architecture** | Small Siamese CNN encoder + feature difference/fusion module + decoder |
 | **Task** | Binary change detection (changed / unchanged per pixel) |
 | **Input** | Two co-sized 256×256 RGB images (before / after) |
-| **Output** | Binary change mask (256×256 uint8, 0/1) |
+| **Output** | Binary change mask (256×256; served to the backend as a 0/255 PNG) |
 
 ---
 
@@ -92,7 +92,17 @@ The model measures aggregate pixel-level change coverage. It reports a percentag
 | **n_errors** | 19 | 19 |
 | **n_total** | 120 | 120 |
 
-The change_ratio improvement (+0.165) reflects the model's ability to better identify the *amount* of change. The change_ratio_types slight decline (−0.042) reflects that the model's quantitative output doesn't always map to the discrete percentage bucket labels. The yes_no and categorical types (smallest/largest/change_to_what) all score None because the model returns quantitative change descriptions, not semantic class labels — this is an expected, honest capability gap.
+**How to read this.** These numbers are a small sample (13–15 questions per type) and should not be over-interpreted:
+
+- `change_ratio` is 4/13 correct vs 1/7 for the baseline — but the baseline could only parse 7 of 13 answers, so the two are not measured on the same set. The difference is within sampling noise.
+- The headline "overall accuracy" is computed over *scored* answers only: 9/28 for the Siamese CNN vs 4/15 for the baseline. It is not a like-for-like comparison, and most of the gap is that the learned answer states its percentage in a form the scorer can parse.
+- All yes/no types and all categorical types (smallest / largest / change_to_what) remain **unscored (0 parseable)** because the model states aggregate change, not a verdict or a land-cover class. This is an honest capability gap, not something this model addresses.
+- **Possible contamination:** CDVQA's test pairs are a subset of the SECOND pairs this model trained on (see Known Limitation 7), so these figures may be on images the model has seen. Treat them as unverified until `check_cdvqa_leakage.py` has been run.
+- The run was made with the change-specialist implementation as of commits `c4a5fda`/`ecd5116`; answer wording and domain gating have since changed, so re-run before quoting.
+
+**No claim of superiority is made** beyond: on this 120-question sample the learned model's percentage was parseable more often.
+
+---
 
 ---
 
@@ -102,7 +112,7 @@ This model was trained on images from the **SECOND dataset** (Semantic Change De
 
 **IMPORTANT**: The SECOND dataset license is unstated. This model and its evaluation should be treated as research-only. For any commercial or public deployment, the SECOND dataset license status must be resolved first.
 
-Additionally, the underlying TinyCD architecture (see `ml/change_model/SELECTION.md`) is released under a **non-commercial/research-only** license per its own README. No formal LICENSE file or SPDX identifier exists for TinyCD.
+**Architecture provenance.** This is an original small Siamese CNN written for this project (`train_change.py`). It is **not** TinyCD, BIT, or ChangeFormer and contains no code from them; those were evaluated as candidates in `SELECTION.md` and not used.
 
 ---
 
@@ -110,7 +120,7 @@ Additionally, the underlying TinyCD architecture (see `ml/change_model/SELECTION
 
 | File | Description |
 |---|---|
-| `ml/change_model/train_change.py` | Training script (Siamese CNN + fp16 mixed precision) |
+| `ml/change_model/train_change.py` | Training script (Siamese CNN + fp16 mixed precision) — the script that produced the shipped weights |
 | `ml/change_model/trained/best_change_model.pt` | Best model weights (4.9M params, ~19 MB) |
 | `ml/change_model/trained/change_training_log.json` | Training log (per-epoch loss, F1, IoU) |
 | `ml/change_model/trained/data/` | Pre-computed .npy arrays (im1, im2, mask, sem1, sem2) |
@@ -126,4 +136,6 @@ Additionally, the underlying TinyCD architecture (see `ml/change_model/SELECTION
 3. **Single GPU**: Requires CUDA for reasonable latency (~929ms per inference on RTX 2050). CPU inference is significantly slower.
 4. **No georeferencing awareness**: The model treats images as raw pixels; it does not use CRS, bounds, or resolution metadata.
 5. **SECOND dataset license unstated**: Training data license status is unclear.
-6. **TinyCD non-commercial license**: The underlying architecture is non-commercial/research-only.
+6. **Training domain**: SECOND is 0.5–3 m aerial RGB. The backend only runs this model on pairs that are the same size, not provably different areas, and not known to be coarser than 3 m per pixel; otherwise it runs the deterministic method and says so. When the resolution is unknown the model still runs, with a warning.
+7. **Likely train/test overlap on CDVQA**: CDVQA's 968 test pairs are a *subset* of SECOND's 2,968 public pairs, and this model was trained on 2,000 of those 2,968 (1,700 train / 300 val). Unless the data-preparation step excluded the CDVQA test pairs — the preparation script is not in this repo, so this is unknown — a large share of the CDVQA evaluation images were seen in training, and the model's CDVQA figures are potentially contaminated. `ml/change_model/check_cdvqa_leakage.py` settles it (run on the training machine against `train_names.json`/`val_names.json`); until it has been run and reports no overlap, do not quote the CDVQA numbers for the learned model as held-out results.
+8. **Trained weights are not committed to this repository**: `best_change_model.pt` and `trained/data/` are produced on the training machine; the worker cannot start without them.

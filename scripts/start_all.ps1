@@ -13,9 +13,14 @@ judging day.
 .PARAMETER NoVqa
 Skip starting the VQA worker (description queries will use the honest
 fallback instead).
+
+.PARAMETER NoChange
+Skip starting the change-detection worker (the deterministic pixel-difference
+method is used instead).
 #>
 param(
-    [switch]$NoVqa
+    [switch]$NoVqa,
+    [switch]$NoChange
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,7 +73,27 @@ if (-not $NoVqa) {
     Write-Host "[SKIP] VQA worker (-NoVqa passed) — description queries will use the honest fallback"
 }
 
-# 4. Frontend
+# 4. Change-detection worker (optional -- needs its own venv AND the trained
+# weights, which are not committed; without them the deterministic
+# pixel-difference method runs and the result says so).
+$changeDir = Join-Path $RepoRoot "ml\change-worker"
+$changeWeights = Join-Path $RepoRoot "ml\change_model\trained\best_change_model.pt"
+$changePython = if ($env:CHANGE_WORKER_PYTHON) { $env:CHANGE_WORKER_PYTHON } else { Join-Path $changeDir "venv\Scripts\python.exe" }
+if ($NoChange) {
+    Write-Host "[SKIP] Change worker (-NoChange passed) -- deterministic change detection will be used"
+} elseif (-not (Test-Path -LiteralPath $changePython) -or -not (Test-Path -LiteralPath $changeWeights)) {
+    Write-Host "[SKIP] Change worker (no worker python or no trained weights) -- deterministic change detection will be used"
+} else {
+    Write-Host "[..]   Starting change worker on :8002"
+    $changeProc = Start-Process -FilePath "powershell" `
+        -ArgumentList "-NoProfile", "-File", (Join-Path $changeDir "run_worker.ps1") `
+        -RedirectStandardOutput (Join-Path $LogDir "change_worker.log") `
+        -RedirectStandardError (Join-Path $LogDir "change_worker.err.log") `
+        -PassThru -WindowStyle Hidden
+    $changeProc.Id | Out-File (Join-Path $LogDir "change_worker.pid")
+}
+
+# 5. Frontend
 Write-Host "[..]   Starting frontend (vite dev server) on :5173"
 Push-Location (Join-Path $RepoRoot "frontend")
 $frontendProc = Start-Process -FilePath "npm" -ArgumentList "run", "dev", "--", "--port", "5173" `

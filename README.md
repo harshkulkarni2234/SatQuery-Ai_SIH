@@ -47,7 +47,7 @@ Specialist registry (6 declared specialists; dispatch via app/services/registry_
   ├── vqa.smolvlm_base                    → local VQA worker (SmolVLM)         [app/services/vqa.py]
   ├── vqa.smolvlm_bigearthnet_lora_stage3 → experimental LoRA (worker-internal routing)
   ├── grounding.deterministic_cv          → deterministic OpenCV/NumPy         [app/services/grounding.py]
-  ├── change.semantic_model               → NOT IMPLEMENTED (deliberately skipped after evaluating real options; see Limitations)
+  ├── change.siamese_binary_cnn           → learned BINARY change model via the change worker (optional) [app/services/change_specialists.py]
   ├── change.deterministic_cv             → deterministic OpenCV/NumPy + real geo-reprojection [app/services/change_detection.py]
   └── cross_modal.feature_fusion          → deterministic fusion + coregistration-aware confidence [app/services/cross_modal.py]
         ▼
@@ -58,7 +58,7 @@ QueryResponse (answer + evidence + confidence + trace_events + compatibility + w
 Report builder (app/services/report.py) → GET /query/{id}/report.pdf | report.json
 ```
 
-The backend never imports `torch`; the heavy ML stack lives in a separate VQA worker service to keep the backend dependency-light.
+The backend never imports `torch`; the heavy ML stack lives in separate worker services (VQA worker on :8001, change-detection worker on :8002) to keep the backend dependency-light.
 
 ## Specialist implementation details
 
@@ -66,7 +66,7 @@ The backend never imports `torch`; the heavy ML stack lives in a separate VQA wo
 - **Grounding** uses a deterministic computer-vision pipeline (OpenCV + NumPy): HSV thresholding, morphological cleaning, connected-component analysis.
 - **Change detection** uses real geographic reprojection (`rasterio.warp.reproject`) when both images are georeferenced, falling back to phase-correlation registration otherwise; reports real changed area in m² from actual pixel resolution (never estimated), and always states its real alignment method.
 - **Optical + SAR fusion** uses deterministic multimodal feature analysis (speckle-filtered SAR backscatter/VV-VH stats, optical colour/NDVI-NDWI stats where bands allow), with per-class (water/vegetation/built-up) attribution reported as `both`/`optical_only`/`sar_only`/`none` — never claims combined evidence unless both sensors actually produced a real signal. Pixel-level agreement confidence is only computed when `coregistration` is independently verified or assumed from real file metadata — never guessed.
-- **Semantic (learned-model) change detection** is a declared-but-unimplemented specialist (`change.semantic_model`): the registry always reports it honestly as unavailable rather than silently omitting it. Real candidates (TinyCD, BIT_CD, ChangeFormer) were researched and one (TinyCD) was ready to integrate — see `ml/change_model/SELECTION.md` — but integrating it was deliberately skipped (its license is non-commercial/research-only, and none of the three candidates produce true semantic class labels anyway, only binary change/no-change) rather than a hardware limitation. See Limitations.
+- **Learned change detection** (`change.siamese_binary_cnn`) is a small original Siamese CNN (~4.9M params) trained on a SECOND-derived split, served by the optional change worker (`ml/change-worker/`). It is **binary** change/no-change: it shows *where* pixels changed, not *what* they changed to, and does not classify land cover. It only runs for same-size pairs that are not provably different areas and not known to be coarser than 3 m/pixel (its 0.5–3 m aerial training domain); otherwise, or if the worker is down or returns something invalid, the deterministic method runs and the result says so (`used_fallback`, warnings, and the executed specialist id in the trace). Model card: `ml/change_model/MODEL_CARD.md`. Trained weights are not committed to the repo.
 
 ## Scientific honesty
 
@@ -87,7 +87,7 @@ specialist (grounding/change/cross-modal) has no GPU dependency at all
 regardless.
 
 Commands below are shown for both platforms; `scripts/start_all.sh` /
-`scripts/start_all.ps1` automate steps 1–3 together (see
+`scripts/start_all.ps1` automate steps 1–4 together (see
 `docs/DEMO_RUNBOOK.md`). **Only the `.sh` scripts and macOS commands were
 actually run and verified in this build's development** — the `.ps1`
 scripts and Windows commands mirror them step-for-step but have not been
@@ -140,7 +140,23 @@ Windows can instead run `.\run_worker.ps1`, which honours
 `VQA_WORKER_PYTHON` (or falls back to `ml\vqa-worker\venv`) and the
 `MODEL_DIR` / `ADAPTER_DIR` variables — see `ml/vqa-worker/.env.example`.
 
-### 3. Frontend
+### 3. Change worker (separate environment, optional)
+
+Serves the learned binary change model. It needs its own venv and the
+trained weights `ml/change_model/trained/best_change_model.pt`, which are
+**not committed** to this repository (they come from the training machine).
+Without it, change queries run the deterministic pixel-difference method and
+say so. Setup and API: `ml/change-worker/README.md`.
+
+```bash
+cd ml/change-worker
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install torch                                 # see README.md for the CUDA wheel line
+pip install -r requirements.change-worker.txt
+python -m uvicorn worker_service:app --host 127.0.0.1 --port 8002
+```
+
+### 4. Frontend
 
 ```bash
 cd frontend
@@ -161,6 +177,9 @@ appears automatically in dev mode.
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql://USER:PASS@localhost:5432/satquery` |
 | `VQA_WORKER_URL` | VQA worker endpoint, e.g. `http://127.0.0.1:8001` |
 | `VQA_WORKER_TIMEOUT_S` | Backend→worker request timeout in seconds (default shown in example) |
+| `CHANGE_WORKER_URL` | Change worker endpoint (default `http://127.0.0.1:8002`) |
+| `CHANGE_WORKER_TIMEOUT_S` | Backend→change-worker request timeout in seconds (default `120`) |
+| `CHANGE_MODEL_MAX_PIXEL_SIZE_M` | Coarsest pixel size (metres) the learned change model is run on (default `3.0`, its training domain) |
 | `MAX_UPLOAD_SIZE_BYTES` | Upload rejection threshold in bytes (default 200 MB); enforced via chunked reads, never buffers the whole file first |
 | `MAX_RASTER_PIXELS` | Pixel-count warning threshold (default ~100 MP); metadata is still extracted, pixel data is not read past this |
 | `MIN_OVERLAP` | Minimum bounding-box IoU for a temporal/cross-modal pair to be considered spatially compatible (default `0.5`) |
@@ -178,7 +197,7 @@ appears automatically in dev mode.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/health` | Reports `database`, `vqa_worker`, and `semantic_change_model` availability separately (not just a flat "ok") |
+| GET | `/health` | Reports `database`, `vqa_worker`, and `learned_change_model` availability separately (not just a flat "ok") |
 | POST | `/images/upload` | Multipart `file` + `modality` (OPTICAL/SAR); optional `capture_date`. Enforces `MAX_UPLOAD_SIZE_BYTES` (413 on overflow) and `MAX_RASTER_PIXELS` (warns, doesn't reject) |
 | GET | `/images/{image_id}` | Real extracted metadata for a stored image (CRS, bounds, resolution, bands, warnings) |
 | POST | `/query` | JSON `{query_text, image_ids}` (1–2 ids) → validated plan + dispatched specialist → `QueryResponse` with `trace_events`, `compatibility`, `confidence_source`, `warnings`, `used_fallback` |
@@ -203,7 +222,7 @@ cd backend
 pip install -r requirements-dev.txt
 ```
 
-Then run the suite (226 passing as of this writing — run it yourself for
+Then run the suite (256 passing as of this writing — run it yourself for
 the current number, don't trust a stale count):
 
 ```bash
@@ -231,11 +250,11 @@ you can also upload your own `.png` / `.jpg` / `.tif` files.
 
 Known limitations, stated honestly rather than hidden:
 
-- Change detection measures **pixel-level visual differences**, not semantic land-cover change (no autonomous "building constructed" claims). It never estimates changed area when pixel resolution is unknown.
-- This machine's GPU (Apple M2, via PyTorch's MPS backend) was verified working for real inference — the VQA worker runs the actual SmolVLM-256M-Instruct model and its experimental LoRA adapter on it, not CPU (see `ml/vqa-worker/README.md`). A GPU was never the blanket blocker earlier drafts of this README implied.
-  - **The semantic (learned-model) change-detection specialist (`change.semantic_model`) was never implemented** — not a hardware limitation. Real candidates were researched (TinyCD, BIT_CD, ChangeFormer — see `ml/change_model/SELECTION.md`); TinyCD was ready to integrate (tiny weights, runs fine on this GPU) but was deliberately not integrated because its license is non-commercial/research-only and none of the three candidates produce true semantic class labels anyway (all three are binary change/no-change only). The deterministic CV specialist always runs instead, and the registry reports this honestly via `used_fallback` rather than silently substituting one for the other.
-  - **The BigEarthNet LoRA fine-tuning run (Phase B2) is still incomplete, but not for a GPU reason either** — `prepare_bigearthnet_vqa.py` needs real BigEarthNet land-cover labels to build a training set, and none exist in this build's data (`testing/` has zero label files of any kind). What IS real: the existing Stage-3 adapter was verified to load and run inference correctly on this GPU for the first time in this build (previously untested), and a real base-vs-specialist comparison was run and recorded — see `ml/adaptation/MODEL_CARD.md`.
-  - **The full RSVQA/CDVQA/VRSBench benchmark evaluation (Phases B3–B6, B10) was not completed** — by the user's own explicit direction to use the local `testing/` folder instead of downloading those datasets, and that folder has no labels to score accuracy against either. There is no `docs/EVALUATION.md` in this build — do not reference one or invent numbers; see `docs/SOLO_PROGRESS.md` for the exact scope decision and status of every phase, and `evaluation/README.md` for what a real (unlabeled, non-benchmark) run against `testing/` actually produced.
+- The deterministic change method measures **pixel-level visual differences**, not semantic land-cover change (no autonomous "building constructed" claims), and never estimates changed area when pixel resolution is unknown. The learned change model is binary only — it does not say *what* changed either.
+- GPU: the VQA worker was verified on an Apple M2 (PyTorch MPS). The LoRA adapter v2.0 and the change model were trained on a separate Windows laptop with an NVIDIA RTX 2050 (CUDA, fp16). A GPU was never the blanket blocker earlier drafts of this README implied.
+  - **Learned change model:** real and trained, but binary-only and trained on a small split (1,700 train / 300 val; val F1 0.468, IoU 0.327). On CDVQA (120-question sample) it produced parseable percentages more often than the deterministic baseline, but the sample is small and the overall numbers are not like-for-like — see `ml/change_model/MODEL_CARD.md`. Two things are not yet done: committing/shipping the trained weights, and running `ml/change_model/check_cdvqa_leakage.py` — CDVQA's test pairs are a subset of the SECOND pairs the model trained on, so its CDVQA numbers are potentially contaminated until that check reports no overlap.
+  - **BigEarthNet LoRA adapter v2.0 (Phase B2):** trained on official BigEarthNet v2.0 labels matched to the local `testing/` patches (25,645 QA pairs; 2,400 rows / 450 steps actually trained). Its RSVQA-LR result (60 questions per type) is **mixed** versus the base model with no adapter, not a clear improvement: rural/urban 61.7% vs 40.7%, comparison 70.0% vs 65.0%, presence 70.0% vs 73.3%, and count answers have a meaningless RMSE (2.26M, outliers) with only 2/39 exact — see `ml/adaptation/MODEL_CARD.md` and `evaluation/results/rsvqa_lr_score_v2.json`. The adapter weights are not committed; the served default is `ml/smolvlm/lora_stage3_v2`.
+  - **Benchmarks (Phases B3–B6, B10):** real seeded-sample runs exist for RSVQA-LR, CDVQA and VRSBench (VQA, referring, captioning); they are samples, not full test sets — see the tables in `evaluation/README.md`. There is no `docs/EVALUATION.md`; see `docs/SOLO_PROGRESS.md` for the status of every phase.
 - Optical ↔ SAR **spatial correspondence is never claimed** unless verified from real file metadata (matching CRS + transform); the cross-modal result reports per-sensor/per-class attribution and states honestly when correspondence is unverified, even for a pair that is genuinely co-registered by construction but ships without embedded georeferencing (see `data/demo/scenario_C_optical_sar/README.md`).
 - Display-region caps are enforced for readability (up to 10 grounding boxes; up to 8 per-sensor cross-modal regions).
 - Confidence is reported only when meaningful (e.g. bounding-box fill ratio, or pixel-mask agreement under verified coregistration); otherwise it is shown as **unavailable**.
@@ -269,7 +288,7 @@ satquery-ai/
 │   │   ├── services/                # planner, router, registry(+adapters), compatibility, trace, report, specialists
 │   │   └── database.py, models.py, schemas.py
 │   ├── alembic/                    # DB migrations
-│   ├── tests/                      # backend test suite (226 tests)
+│   ├── tests/                      # backend test suite (256 tests)
 │   ├── requirements.txt
 │   └── .env.example
 ├── ml/
@@ -277,7 +296,10 @@ satquery-ai/
 │   │   ├── worker_service.py, model_provider.py
 │   │   ├── run_worker.ps1
 │   │   └── requirements.vqa-worker.txt
-│   ├── smolvlm/lora_stage3/        # experimental BigEarthNet LoRA adapter
+│   ├── change-worker/              # separate change-detection worker (Siamese CNN), :8002
+│   ├── change_model/               # training script, model card, selection notes (weights not committed)
+│   ├── smolvlm/lora_stage3/        # legacy BigEarthNet LoRA adapter (v1.0, unknown provenance)
+│   ├── smolvlm/lora_stage3_v2/     # current LoRA adapter v2.0 config/logs (weights not committed)
 │   └── data/                       # demo-data fetch scripts (e.g. download_lakemead_temporal_pair.py)
 ├── frontend/                       # React (Vite) single-page app
 │   ├── src/                        # App.jsx, api.js, components/, constants/, lib/
@@ -303,11 +325,10 @@ This was built solo against a plan originally scoped for 3 parallel
 contributors (Person A: backend/geospatial, Person B: ML/eval, Person C:
 frontend/report/demo) — see `docs/satquery-master-build-spec.md` for the
 original plan and `docs/SOLO_PROGRESS.md` for exactly which phases are
-done, deferred, or blocked, and the real reason for each (missing labeled
-training/benchmark data in most cases, one deliberate license-driven scope
-call for the change-detection specialist — not a GPU limitation; this
-machine's Apple M2 GPU was verified working via PyTorch's MPS backend).
-Nothing above claims work that file doesn't corroborate.
+done, deferred, or blocked, and the real reason for each. Two model
+artifacts (the change model and the LoRA v2.0 adapter) were trained on a
+separate RTX 2050 laptop and their weights are not yet committed to this
+repository. Nothing above claims work that file doesn't corroborate.
 
 ## License
 

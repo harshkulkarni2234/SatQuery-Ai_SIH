@@ -6,7 +6,7 @@
 # executed on a real Windows machine in this session; see
 # docs/DEMO_RUNBOOK.md section 6).
 #
-# Usage: bash scripts/start_all.sh [--no-vqa]
+# Usage: bash scripts/start_all.sh [--no-vqa] [--no-change]
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,9 +14,13 @@ LOG_DIR="$REPO_ROOT/scripts/.logs"
 mkdir -p "$LOG_DIR"
 
 SKIP_VQA=false
-if [[ "${1:-}" == "--no-vqa" ]]; then
-  SKIP_VQA=true
-fi
+SKIP_CHANGE=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-vqa) SKIP_VQA=true ;;
+    --no-change) SKIP_CHANGE=true ;;
+  esac
+done
 
 echo "== SatQuery AI: starting all services =="
 
@@ -70,7 +74,26 @@ else
   echo "[SKIP] VQA worker (--no-vqa passed) — description queries will use the honest fallback"
 fi
 
-# 4. Frontend
+# 4. Change-detection worker (optional — needs its own venv AND the trained
+# weights, which are not committed; without them the deterministic
+# pixel-difference method runs and the result says so).
+CHANGE_DIR="$REPO_ROOT/ml/change-worker"
+CHANGE_WEIGHTS="$REPO_ROOT/ml/change_model/trained/best_change_model.pt"
+if [[ "$SKIP_CHANGE" == true ]]; then
+  echo "[SKIP] Change worker (--no-change passed) — deterministic change detection will be used"
+elif [[ ! -x "$CHANGE_DIR/venv/bin/python" || ! -f "$CHANGE_WEIGHTS" ]]; then
+  echo "[SKIP] Change worker (no ml/change-worker/venv or no trained weights) — deterministic change detection will be used"
+else
+  echo "[..]   Starting change worker on :8002"
+  (
+    cd "$CHANGE_DIR"
+    venv/bin/python -m uvicorn worker_service:app --host 127.0.0.1 --port 8002 \
+      > "$LOG_DIR/change_worker.log" 2>&1 &
+    echo $! > "$LOG_DIR/change_worker.pid"
+  )
+fi
+
+# 5. Frontend
 echo "[..]   Starting frontend (vite dev server) on :5173"
 (
   cd "$REPO_ROOT/frontend"

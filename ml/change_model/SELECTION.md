@@ -65,8 +65,13 @@ real trained CNN — using it is a genuine upgrade from
 learned-feature model. But its output is still **binary** change/no-change
 per pixel, not a labeled semantic class (e.g. it cannot say "vegetation
 was replaced by a building" — only "this region changed"). The registry
-entry's existing id, `change.semantic_model`, predates this integration
-(Phase A4) and is somewhat misleading in isolation; this specialist's own
-`SpecialistResult` evidence and answer text must describe its output as
-"learned binary change detection," never as semantic/labeled change
-classification, to stay honest about what TinyCD actually produces.
+entry was originally named `change.semantic_model`, which was misleading; it
+is now `change.siamese_binary_cnn`, and its `SpecialistResult` evidence and
+answer text describe the output as learned *binary* change detection, never
+as semantic/labeled change classification.
+
+**Outcome:** TinyCD was *not* used. The shipped model is an original small
+Siamese CNN (`train_change.py`, see `MODEL_CARD.md`); no TinyCD code or
+weights are in this project. The text above is kept as the record of the
+selection reasoning that preceded training.
+
