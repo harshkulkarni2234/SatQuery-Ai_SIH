@@ -1,4 +1,4 @@
-﻿﻿<#
+<#
 .SYNOPSIS
 End-to-end smoke test against a running SatQuery AI backend.
 
