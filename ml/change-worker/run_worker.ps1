@@ -1,13 +1,3 @@
-<#
-.SYNOPSIS
-Starts the local change detection worker (Siamese CNN) on 127.0.0.1.
-.DESCRIPTION
-Uses an isolated worker python environment. Resolves it in this order:
-  1. $env:CHANGE_WORKER_PYTHON (absolute path to python.exe)
-  2. ml/change-worker/venv (created by installing requirements.change-worker.txt)
-.PARAMETER Port
-HTTP port (default 8002, or $env:CHANGE_WORKER_PORT).
-#>
 param(
     [int]$Port = 8002
 )

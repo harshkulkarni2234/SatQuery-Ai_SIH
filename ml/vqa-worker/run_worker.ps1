@@ -1,15 +1,3 @@
-<#
-.SYNOPSIS
-Starts the local VQA worker (Base SmolVLM + experimental Stage 3 LoRA) on 127.0.0.1.
-.DESCRIPTION
-Uses an isolated worker python environment. Resolves it in this order:
-  1. $env:VQA_WORKER_PYTHON (absolute path to python.exe, e.g. the tested Phase 7C env)
-  2. ml/vqa-worker/venv (created by installing requirements.vqa-worker.txt)
-.PARAMETER Port
-HTTP port (default 8001, or $env:VQA_WORKER_PORT).
-.PARAMETER NoSpecialist
-Do not load the experimental LoRA adapter.
-#>
 param(
     [int]$Port = 8001,
     [switch]$NoSpecialist

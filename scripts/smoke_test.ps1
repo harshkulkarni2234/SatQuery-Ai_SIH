@@ -1,4 +1,4 @@
-<#
+﻿﻿<#
 .SYNOPSIS
 End-to-end smoke test against a running SatQuery AI backend.
 
@@ -7,7 +7,7 @@ Windows mirror of scripts/smoke_test.sh, authored to match it step-for-step:
 hits /health, uploads the real data/demo/ scenario files, runs the 4 demo
 queries, downloads one PDF report, prints PASS/FAIL.
 NOTE: this script has NOT been executed on a real Windows machine in this
-session — scripts/smoke_test.sh is the one actually run and verified
+session -- scripts/smoke_test.sh is the one actually run and verified
 end-to-end (see docs/DEMO_RUNBOOK.md section 6).
 
 .PARAMETER BaseUrl
