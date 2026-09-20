@@ -317,3 +317,17 @@ class TestQueryWiring:
         assert "planned_specialist_id" not in meta
         assert body["used_fallback"] is True  # registry-level fallback
         assert any(r["id"] == LEARNED for r in meta["rejected_specialists"])
+
+
+def test_execution_trace_names_the_specialist_that_actually_ran(monkeypatch):
+    """The EXECUTION trace line must not name the planned specialist when a
+    different one ran — that would contradict the fallback reason beside it."""
+    monkeypatch.setattr(registry, "_change_worker_available", lambda: True)
+    monkeypatch.setattr(cs, "_post", lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError("x")))
+    body = _ask(*_upload_pair())
+    exec_events = [e for e in body["execution_trace_events"] if e["step"] == "EXECUTION"] \
+        if "execution_trace_events" in body else \
+        [e for e in client.get(f"/query/{body['query_id']}").json()["trace_events"] if e["step"] == "EXECUTION"]
+    assert exec_events, "no EXECUTION trace event recorded"
+    detail = exec_events[0]["detail"]
+    assert DETERMINISTIC in detail and LEARNED not in detail, detail

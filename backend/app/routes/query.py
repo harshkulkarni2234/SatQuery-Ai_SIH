@@ -281,22 +281,6 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
         execution_status = "unavailable"
     else:
         execution_status = "completed"
-    recorder.record(
-        "EXECUTION",
-        "COMPLETED" if execution_status == "completed" else "PASSED",
-        f"{selected_entry.spec.id if selected_entry else task} finished ({execution_status})",
-    )
-    recorder.record(
-        "EVIDENCE",
-        "COMPLETED",
-        f"{len(bounding_boxes or [])} box(es), mask={'yes' if change_mask_path else 'no'}",
-    )
-
-    used_fallback = bool(specialist_result and specialist_result.used_fallback) or bool(
-        selected_entry and selected_entry.spec.is_fallback
-    )
-    confidence_source = specialist_result.confidence_source if specialist_result else "unavailable"
-    warnings = specialist_result.warnings if specialist_result else []
     # The *planned* specialist is what the registry selected; the *executed*
     # one is what actually produced the answer, and the trace/DB must record
     # the one that really ran. They differ when (a) the learned change model
@@ -317,6 +301,25 @@ def post_query(body: QueryRequest, request: Request, db: Session = Depends(get_d
             top_meta["execution_note"] = (
                 f"Planned {selected_entry.spec.id} but ran {executed_specialist_id}: {skipped}."
             )
+
+    # Name the specialist that ACTUALLY ran — naming the planned one here would
+    # contradict the fallback reason recorded alongside it.
+    recorder.record(
+        "EXECUTION",
+        "COMPLETED" if execution_status == "completed" else "PASSED",
+        f"{executed_specialist_id or task} finished ({execution_status})",
+    )
+    recorder.record(
+        "EVIDENCE",
+        "COMPLETED",
+        f"{len(bounding_boxes or [])} box(es), mask={'yes' if change_mask_path else 'no'}",
+    )
+
+    used_fallback = bool(specialist_result and specialist_result.used_fallback) or bool(
+        selected_entry and selected_entry.spec.is_fallback
+    )
+    confidence_source = specialist_result.confidence_source if specialist_result else "unavailable"
+    warnings = specialist_result.warnings if specialist_result else []
     if selected_entry is not None:
         top_meta["specialist_id"] = executed_specialist_id
         top_meta["selection_reason"] = select_reason
