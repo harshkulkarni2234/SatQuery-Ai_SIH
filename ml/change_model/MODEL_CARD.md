@@ -138,7 +138,7 @@ The script reads the 2,968 pairs in `evaluation/second_dataset/raw/SECOND_train_
 
 **Verification (2026-09-20):** Running `prepare_second_data.py` with `--output-dir` pointing to a temporary directory produced output that was **byte-for-byte identical** to all committed artifacts: `train_names.json`, `val_names.json`, and all five arrays (`{train,val}_{im1,im2,mask,sem1,sem2}.npy`) matched exactly (0 differing bytes). This proves the script reproduces the existing training data.
 
-**Known limitation:** `meta.json` in the committed repo is truncated/corrupted (incomplete `colormap` field). The script generates a valid `meta.json`; the committed file is not updated as part of this task per the task constraints.
+`meta.json` was truncated in an earlier commit (incomplete `colormap`); it has since been rewritten to the exact value the script emits (seed 42, val_frac 0.15, size 256, the 7-entry SECOND colormap, train_n 1700, val_n 300).
 
 ---
 
