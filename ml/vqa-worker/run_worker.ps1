@@ -1,3 +1,20 @@
+<#
+.SYNOPSIS
+Starts the local VQA worker (base SmolVLM + BigEarthNet LoRA adapter) on 127.0.0.1.
+
+.DESCRIPTION
+Uses an isolated worker python environment. Resolves it in this order:
+  1. $env:VQA_WORKER_PYTHON (absolute path to python.exe)
+  2. ml/vqa-worker/venv (created by installing requirements.vqa-worker.txt)
+ASCII only on purpose - Windows PowerShell 5.1 reads .ps1 files as ANSI unless
+they carry a BOM, so non-ASCII characters here can break parsing.
+
+.PARAMETER Port
+HTTP port (default 8001, or $env:VQA_WORKER_PORT).
+
+.PARAMETER NoSpecialist
+Do not load the LoRA adapter; serve the base model only.
+#>
 param(
     [int]$Port = 8001,
     [switch]$NoSpecialist

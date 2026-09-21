@@ -6,7 +6,7 @@ export const DEMO_SCENARIOS = [
   {
     id: "scenario_A_single",
     label: "Single image",
-    description: "One optical image of uncertain provenance (see its README) — general description and water grounding.",
+    description: "One optical image of uncertain provenance (see its README) — general description and land-cover grounding.",
     files: [
       {
         url: "/demo-assets/demo/scenario_A_single/single_image.jpg",
@@ -17,7 +17,12 @@ export const DEMO_SCENARIOS = [
     ],
     queries: [
       "What can you tell me about this image?",
-      "Show me the water body.",
+      // The grounding specialist is HSV-based. On this scene "water" honestly
+      // returns no regions (the river is grey-brown, not blue), and
+      // farmland/vegetation each collapse to a single full-frame box. Built-up
+      // is the only target here that yields real, localised regions.
+      // See docs/DEMO_RUNBOOK.md.
+      "Show me the built-up area.",
     ],
   },
   {

@@ -26,8 +26,25 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $LogDir = Join-Path $PSScriptRoot ".logs"
-$Env:PATH = "C:\Program Files\PostgreSQL\18\bin;" + $Env:PATH
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+
+# Put PostgreSQL's bin on PATH only if pg_isready is not already reachable.
+# A hardcoded version path works on one machine and silently does nothing on
+# every other one, so discover the newest install instead.
+if (-not (Get-Command pg_isready -ErrorAction SilentlyContinue)) {
+    $pgBin = Get-ChildItem -Path "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
+        Sort-Object { [int]($_.Name -replace '\D', '0') } -Descending |
+        ForEach-Object { Join-Path $_.FullName "bin" } |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_ "pg_isready.exe") } |
+        Select-Object -First 1
+    if ($pgBin) {
+        $Env:PATH = "$pgBin;" + $Env:PATH
+        Write-Host "[OK]   Using PostgreSQL tools from $pgBin"
+    } else {
+        Write-Host "[WARN] pg_isready not on PATH and no PostgreSQL install found under C:\Program Files\PostgreSQL"
+        Write-Host "       Continuing anyway - this only affects the readiness check, not the backend."
+    }
+}
 
 Write-Host "== SatQuery AI: starting all services =="
 
