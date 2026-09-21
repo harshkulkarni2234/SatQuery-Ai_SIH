@@ -41,12 +41,12 @@ try {
 
 function Upload-Image($Path, $Modality, $CaptureDate) {
     try {
-        $form = @{
-            file     = Get-Item -Path $Path
-            modality = $Modality
-        }
-        if ($CaptureDate) { $form["capture_date"] = $CaptureDate }
-        $resp = Invoke-RestMethod -Uri "$BaseUrl/images/upload" -Method Post -Form $form -TimeoutSec 30
+        $filePath = Resolve-Path $Path
+        $url = "$BaseUrl/images/upload"
+        $args = @("-s", "-X", "POST", $url, "-F", "file=@`"$filePath`"", "-F", "modality=$Modality")
+        if ($CaptureDate) { $args += "-F"; $args += "capture_date=$CaptureDate" }
+        $json = curl.exe @args
+        $resp = $json | ConvertFrom-Json
         return $resp.image_id
     } catch {
         return $null
