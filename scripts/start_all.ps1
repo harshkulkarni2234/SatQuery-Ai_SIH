@@ -30,18 +30,29 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 # Put PostgreSQL's bin on PATH only if pg_isready is not already reachable.
 # A hardcoded version path works on one machine and silently does nothing on
-# every other one, so discover the newest install instead.
+# every other one, so discover the install instead. Deliberately written as a
+# plain loop with no type casts: $ErrorActionPreference is "Stop" here, so a
+# throwing expression would abort the whole startup, and failing to find
+# pg_isready must never do that.
 if (-not (Get-Command pg_isready -ErrorAction SilentlyContinue)) {
-    $pgBin = Get-ChildItem -Path "C:\Program Files\PostgreSQL" -Directory -ErrorAction SilentlyContinue |
-        Sort-Object { [int]($_.Name -replace '\D', '0') } -Descending |
-        ForEach-Object { Join-Path $_.FullName "bin" } |
-        Where-Object { Test-Path -LiteralPath (Join-Path $_ "pg_isready.exe") } |
-        Select-Object -First 1
+    $pgBin = $null
+    $pgRoot = "C:\Program Files\PostgreSQL"
+    if (Test-Path -LiteralPath $pgRoot) {
+        $versions = @(Get-ChildItem -LiteralPath $pgRoot -Directory -ErrorAction SilentlyContinue |
+                      Sort-Object Name -Descending)
+        foreach ($dir in $versions) {
+            $candidate = Join-Path $dir.FullName "bin"
+            if (Test-Path -LiteralPath (Join-Path $candidate "pg_isready.exe")) {
+                $pgBin = $candidate
+                break
+            }
+        }
+    }
     if ($pgBin) {
         $Env:PATH = "$pgBin;" + $Env:PATH
         Write-Host "[OK]   Using PostgreSQL tools from $pgBin"
     } else {
-        Write-Host "[WARN] pg_isready not on PATH and no PostgreSQL install found under C:\Program Files\PostgreSQL"
+        Write-Host "[WARN] pg_isready not on PATH and no PostgreSQL install found under $pgRoot"
         Write-Host "       Continuing anyway - this only affects the readiness check, not the backend."
     }
 }
