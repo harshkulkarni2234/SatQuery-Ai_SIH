@@ -6,7 +6,7 @@ export const DEMO_SCENARIOS = [
   {
     id: "scenario_A_single",
     label: "Single image",
-    description: "One optical image of uncertain provenance (see its README) — general description and land-cover grounding.",
+    description: "One optical scene of a city on a river.",
     files: [
       {
         url: "/demo-assets/demo/scenario_A_single/single_image.jpg",
@@ -28,7 +28,7 @@ export const DEMO_SCENARIOS = [
   {
     id: "scenario_B_temporal",
     label: "Temporal pair (Lake Mead / Hoover Dam)",
-    description: "Real Sentinel-2 L2A scenes, 2018-08-24 vs 2022-08-23, fetched via STAC (Phase B1) — change detection.",
+    description: "Two real Sentinel-2 scenes of Lake Mead, four years apart.",
     files: [
       {
         url: "/demo-assets/demo/scenario_B_temporal/before.tif",
@@ -48,7 +48,7 @@ export const DEMO_SCENARIOS = [
   {
     id: "scenario_C_optical_sar",
     label: "Optical + SAR pair",
-    description: "Optical/SAR pair, same scene grid (see its README for the honest coregistration-labeling caveat) — cross-modal fusion.",
+    description: "An optical scene and a radar scene of the same ground.",
     files: [
       {
         url: "/demo-assets/demo/scenario_C_optical_sar/optical.png",
@@ -72,13 +72,25 @@ export const DEMO_SCENARIOS = [
 // Flattened one-card-per-query view for the picker UI: scenario_A_single
 // has 2 preset queries over the same file, so it renders as 2 cards
 // sharing one `files` list rather than 1 card the user has to edit.
+// A short, human title per card. Keyed by scenario id + query index so the
+// single-image scenario can show its two very different questions separately.
+const CARD_TITLES = {
+  "scenario_A_single-0": "Describe a scene",
+  "scenario_A_single-1": "Find land cover",
+  "scenario_B_temporal-0": "Detect change over time",
+  "scenario_C_optical_sar-0": "Combine optical and radar",
+};
+
 export const DEMO_SCENARIO_ITEMS = DEMO_SCENARIOS.flatMap((scenario) =>
-  scenario.queries.map((query, i) => ({
-    key: `${scenario.id}-${i}`,
-    scenarioId: scenario.id,
-    label: scenario.queries.length > 1 ? `${scenario.label} — "${query}"` : scenario.label,
-    description: scenario.description,
-    query,
-    files: scenario.files,
-  }))
+  scenario.queries.map((query, i) => {
+    const key = `${scenario.id}-${i}`;
+    return {
+      key,
+      scenarioId: scenario.id,
+      label: CARD_TITLES[key] || scenario.label,
+      description: scenario.description,
+      query,
+      files: scenario.files,
+    };
+  })
 );

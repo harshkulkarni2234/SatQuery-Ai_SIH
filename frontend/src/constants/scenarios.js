@@ -4,25 +4,25 @@
 export const SCENARIOS = [
   {
     label: "Visual QA",
-    description: "Describe or ask questions about a single image.",
+    description: "Ask what is in one scene.",
     query: "What can you tell me about this image?",
     combo: "single",
   },
   {
     label: "Grounding",
-    description: "Locate land-cover objects such as water or buildings.",
+    description: "Find water, vegetation or built-up areas.",
     query: "Where is the water located?",
     combo: "single",
   },
   {
     label: "Change Detection",
-    description: "Compare two images captured at different dates.",
+    description: "Compare two dates of the same place.",
     query: "Show me the changes between these two images.",
     combo: "pair-same-modality",
   },
   {
     label: "Cross-Modal",
-    description: "Analyze optical and SAR imagery together.",
+    description: "Read optical and radar together.",
     query: "Compare the optical and SAR images.",
     combo: "pair-optical-sar",
   },

@@ -19,7 +19,7 @@ const STATUS_ICON = {
 // must never imply a model executed unless the backend says it did") and
 // rule 2/3 (never fabricate results). Every detail/duration shown here comes
 // straight from the /query response; nothing is invented client-side.
-export default function TraceReplay({ result, onDone }) {
+export default function TraceReplay({ result, onDone, hold = false }) {
   const events = result?.trace_events || [];
   const [revealCount, setRevealCount] = useState(0);
   const doneCalled = useRef(false);
@@ -33,6 +33,8 @@ export default function TraceReplay({ result, onDone }) {
       return;
     }
     if (revealCount >= events.length) {
+      // During a guided demo the trace stays on screen until the user advances.
+      if (hold) return undefined;
       const t = setTimeout(() => {
         if (!doneCalled.current) {
           doneCalled.current = true;
@@ -44,7 +46,7 @@ export default function TraceReplay({ result, onDone }) {
     const t = setTimeout(() => setRevealCount((c) => c + 1), STEP_REVEAL_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealCount, events.length]);
+  }, [revealCount, events.length, hold]);
 
   const task = result?.task_classified;
   const spec = SPECIALISTS.find((s) => s.id === task);

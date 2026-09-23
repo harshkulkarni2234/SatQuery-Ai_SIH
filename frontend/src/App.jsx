@@ -4,6 +4,10 @@ import { IconSatellite } from "./components/icons/index.jsx";
 import InputWorkspace, { MAX_IMAGES } from "./components/input/InputWorkspace.jsx";
 import AgentSelection from "./components/agent/AgentSelection.jsx";
 import TraceReplay from "./components/agent/TraceReplay.jsx";
+import SystemStatus from "./components/common/SystemStatus.jsx";
+import DemoLauncher from "./components/demo/DemoLauncher.jsx";
+import DemoTour from "./components/demo/DemoTour.jsx";
+import { TOUR_STEPS } from "./constants/tourSteps.js";
 import AnalysisReady from "./components/agent/AnalysisReady.jsx";
 import AnalysisResult from "./components/results/AnalysisResult.jsx";
 
@@ -14,6 +18,8 @@ export default function App() {
   const [errorDetail, setErrorDetail] = useState(null);
   const [result, setResult] = useState(null);
   const [view, setView] = useState("input"); // input | waiting | trace | ready | result
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(-1); // -1 = tour not running
   const [selectedTask, setSelectedTask] = useState(null);
 
   // Images upload to the backend as soon as they're added (not deferred to
@@ -182,7 +188,17 @@ export default function App() {
             <h1>SatQuery AI</h1>
           </div>
         </div>
-        <span className="proto-badge">SIH 2026</span>
+        <div className="header-right">
+          <SystemStatus />
+          <button
+            className="demo-mode-btn"
+            onClick={() => setDemoOpen(true)}
+            disabled={tourStep >= 0}
+          >
+            Demo mode
+          </button>
+          <span className="proto-badge">SIH 2026</span>
+        </div>
       </header>
 
       <main className="main">
@@ -198,12 +214,16 @@ export default function App() {
             onAnalyze={handleAnalyze}
             error={error}
             errorDetail={errorDetail}
-            onLoadDemoScenario={loadDemoScenario}
           />
         )}
         {view === "waiting" && <AgentSelection key="waiting" />}
         {view === "trace" && (
-          <TraceReplay key="trace" result={result} onDone={() => setView("ready")} />
+          <TraceReplay
+            key="trace"
+            result={result}
+            hold={tourStep >= 0}
+            onDone={() => setView("ready")}
+          />
         )}
         {view === "ready" && (
           <AnalysisReady
@@ -227,6 +247,35 @@ export default function App() {
           />
         )}
       </main>
+
+      <DemoLauncher
+        open={demoOpen}
+        onClose={() => setDemoOpen(false)}
+        onPick={async (item) => {
+          await loadDemoScenario(item);
+          setDemoOpen(false);
+          setTourStep(0);
+        }}
+      />
+
+      {tourStep >= 0 && (
+        <DemoTour
+          steps={TOUR_STEPS}
+          index={tourStep}
+          onExit={() => setTourStep(-1)}
+          onBack={() => setTourStep((i) => Math.max(0, i - 1))}
+          onNext={() => {
+            const step = TOUR_STEPS[tourStep];
+            // "Run it" actually runs the query. Leaving the trace goes straight
+            // to the result: the Analysis Ready interstitial would otherwise
+            // leave the next step waiting for an element that is not on screen.
+            if (step.sel === ".btn-analyze") handleAnalyze();
+            if (step.sel === ".trace-replay") setView("result");
+            if (tourStep === TOUR_STEPS.length - 1) setTourStep(-1);
+            else setTourStep((i) => i + 1);
+          }}
+        />
+      )}
 
       <footer className="footer">
         SatQuery AI {"·"} SIH 2026 Prototype

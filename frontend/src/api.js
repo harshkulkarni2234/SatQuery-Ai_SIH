@@ -43,6 +43,14 @@ async function runQuery(queryText, imageIds) {
   return data; // QueryResponse
 }
 
+async function getHealth() {
+  // Real backend liveness. Never guess: on failure the caller shows "unknown",
+  // not "up".
+  const res = await fetch("/health");
+  if (!res.ok) throw new ApiError("Health check failed", res.status, null);
+  return res.json();
+}
+
 async function getSpecialists() {
   const res = await fetch("/specialists");
   const data = await res.json().catch(() => []);
@@ -87,4 +95,4 @@ class ApiError extends Error {
   }
 }
 
-export { uploadImage, getImage, runQuery, getSpecialists, reportPdfUrl, reportJsonUrl, ApiError };
+export { uploadImage, getImage, runQuery, getHealth, getSpecialists, reportPdfUrl, reportJsonUrl, ApiError };

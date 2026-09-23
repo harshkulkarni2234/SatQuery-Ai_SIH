@@ -4,7 +4,7 @@ import { SCENARIOS, imageCombo } from "../../constants/scenarios.js";
 import { pairSummary } from "../../lib/format.js";
 import ImageCard from "./ImageCard.jsx";
 import ErrorPanel from "../common/ErrorPanel.jsx";
-import DemoScenarioPicker from "./DemoScenarioPicker.jsx";
+import RegistryPanel from "./RegistryPanel.jsx";
 
 const MAX_IMAGES = 2;
 
@@ -26,8 +26,8 @@ function PairSummary({ images }) {
         Both georeferenced: <strong>{bothGeoreferenced ? "Yes" : "No"}</strong>
       </span>
       <p className="note">
-        This is informational only — the backend's compatibility check is the
-        authority on whether these two images can be analyzed together.
+        A quick look only. The backend compatibility check decides whether these
+        two scenes can actually be analysed together.
       </p>
     </div>
   );
@@ -43,7 +43,6 @@ export default function InputWorkspace({
   onAnalyze,
   error,
   errorDetail,
-  onLoadDemoScenario,
 }) {
   const fileRef = useRef(null);
   const pickFiles = () => fileRef.current && fileRef.current.click();
@@ -53,10 +52,15 @@ export default function InputWorkspace({
   return (
     <div className="input-workspace fade-in">
       <div className="workspace-hero">
-        <h1 className="hero-title">SatQuery AI</h1>
-        <p className="hero-sub">Multimodal Remote Sensing Intelligence Platform</p>
+        <h1 className="hero-title">Multimodal remote sensing analysis</h1>
+        <p className="hero-sub">
+          Upload one or two scenes and ask a question. You get an answer, the
+          evidence behind it, and a record of how it was produced.
+        </p>
       </div>
 
+      <div className="workspace-grid">
+      <div className="workspace-main">
       <div className="input-card">
         <section className="field">
           <div className="field-label">Remote Sensing Imagery</div>
@@ -149,7 +153,12 @@ export default function InputWorkspace({
         </button>
       </div>
 
-      <div className="demo-queries">
+      </div>
+
+      <aside className="workspace-side">
+      <RegistryPanel />
+
+      <div className="demo-queries panel">
         <span className="demo-label">Try an example</span>
         <div className="preset-row">
           {examples.map((s) => (
@@ -165,7 +174,8 @@ export default function InputWorkspace({
         </div>
       </div>
 
-      {onLoadDemoScenario && <DemoScenarioPicker onLoad={onLoadDemoScenario} />}
+      </aside>
+      </div>
     </div>
   );
 }
