@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DEMO_SCENARIO_ITEMS } from "../../constants/demoScenarios.js";
 
 // Full-screen scenario chooser. Opens from the Demo mode button in the header.
@@ -7,6 +7,16 @@ import { DEMO_SCENARIO_ITEMS } from "../../constants/demoScenarios.js";
 export default function DemoLauncher({ open, onClose, onPick }) {
   const [loadingKey, setLoadingKey] = useState(null);
   const [error, setError] = useState(null);
+
+  // Reset on every open. Without this a successful pick leaves loadingKey set
+  // after the parent closes the modal, so reopening shows a card stuck on
+  // "Loading…" with every card disabled.
+  useEffect(() => {
+    if (open) {
+      setLoadingKey(null);
+      setError(null);
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -17,6 +27,7 @@ export default function DemoLauncher({ open, onClose, onPick }) {
       await onPick(item);
     } catch (err) {
       setError(`Could not load ${item.label}. ${err.message}`);
+    } finally {
       setLoadingKey(null);
     }
   }
