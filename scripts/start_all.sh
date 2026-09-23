@@ -97,7 +97,7 @@ fi
 echo "[..]   Starting frontend (vite dev server) on :5173"
 (
   cd "$REPO_ROOT/frontend"
-  npm run dev -- --port 5173 > "$LOG_DIR/frontend.log" 2>&1 &
+  npm run dev -- --port 5173 --host 127.0.0.1 > "$LOG_DIR/frontend.log" 2>&1 &
   echo $! > "$LOG_DIR/frontend.pid"
 )
 sleep 2
