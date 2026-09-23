@@ -261,7 +261,7 @@ def _interpret(optical: dict, sar: dict) -> dict:
     if water >= 0.15 and dark >= 0.30:
         readings.append(
             "OPTICAL + SAR agree on likely water: optical water-like blue dominance "
-            f"({water:.0%}) pairs with SAR very-low backscatter ({dark:.0%}) — "
+            f"({water:.0%}) pairs with SAR very-low backscatter ({dark:.0%}), "
             "radar echoes near-flat surfaces specularly, appearing dark."
         )
     elif dark >= 0.30 and (water < 0.15 and cloud >= 0.30):
@@ -297,7 +297,7 @@ def _interpret(optical: dict, sar: dict) -> dict:
         readings.append(
             f"OPTICAL + SAR consistent with built-up/urban surfaces: "
             f"{built:.0%} low-saturation (grey/tan) pixels and elevated SAR "
-            "backscatter variability — strong corner reflections from structures."
+            "backscatter variability, from strong corner reflections off structures."
         )
 
     if not readings:
@@ -343,7 +343,7 @@ MODALITY_CONTRIBUTION_NOTE = (
     "look like what), while SAR provides radar backscatter cues (how rough or flat "
     "surfaces scatter the transmitted signal). Because the two modalities carry "
     "complementary physical evidence, the system relates them rather than relying "
-    "on a single sensor — and this prototype does so with deterministic, "
+    "on a single sensor, and this prototype does so with deterministic, "
     "explainable statistics (no pretrained cross-modal model was used)."
 )
 
@@ -444,8 +444,8 @@ def analyze_pair(
     attribution_note = ", ".join(f"{k.replace('_', '-')}: {v.replace('_', ' ')}" for k, v in per_modality.items())
     answer_text = (
         "Cross-modal analysis of the OPTICAL and SAR pair (deterministic "
-        "statistics only — no pretrained cross-modal model). "
-        f"{top_reading} Modality attribution per class — {attribution_note}. "
+        "statistics only, no pretrained cross-modal model). "
+        f"{top_reading} Modality attribution per class: {attribution_note}. "
         "Detailed per-modality statistics are in the evidence."
     )
 

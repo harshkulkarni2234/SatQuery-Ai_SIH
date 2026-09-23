@@ -229,7 +229,7 @@ def classify_query(query_text: str, images: list[dict]) -> dict:
         "task_classified": "VQA",
         "modalities_detected": modalities_detected,
         "validation_passed": True,
-        "reason": "Single image with a descriptive question — routed to VQA (SmolVLM worker).",
+        "reason": "Single image with a descriptive question, routed to VQA (SmolVLM worker).",
         "grounding_target": None,
     }
 
